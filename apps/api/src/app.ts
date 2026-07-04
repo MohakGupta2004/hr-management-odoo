@@ -1,6 +1,8 @@
 import express from "express";
 import type { Request, Response, NextFunction } from "express";
 import cors from "cors";
+import path from "path";
+import fs from "fs";
 import { usersRouter } from "./modules/users/users.router";
 import { authRouter } from "./modules/auth/auth.route";
 import { employeeRouter } from "./modules/employee/employee.route";
@@ -9,8 +11,14 @@ import { AppError } from "./utils/errors";
 
 const app = express();
 
+const uploadDir = path.join(__dirname, "../uploads");
+if (!fs.existsSync(uploadDir)) {
+  fs.mkdirSync(uploadDir, { recursive: true });
+}
+
 app.use(cors());
 app.use(express.json());
+app.use("/uploads", express.static(uploadDir));
 
 app.use((err: any, req: Request, res: Response, next: NextFunction) => {
   if (err instanceof SyntaxError && "status" in err && err.status === 400 && "body" in err) {

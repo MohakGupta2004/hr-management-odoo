@@ -166,11 +166,11 @@ model Employee {
 
   esicCode String?
 
-  // skills Skill[]
+  skills Skill[]
 
-  // certifications Certification[]
+  certifications Certification[]
 
-  // documents Document[]
+  documents Document[]
 
   // attendances Attendance[]
 
@@ -197,4 +197,42 @@ model Employee {
   @@index([department])
 
   @@index([employmentStatus])
+}
+
+model Skill {
+  id         String   @id @default(cuid())
+  employeeId String
+  employee   Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  name       String
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@unique([employeeId, name])
+  @@index([employeeId])
+}
+
+model Certification {
+  id         String   @id @default(cuid())
+  employeeId String
+  employee   Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  name       String
+  issuedBy   String
+  issuedAt   DateTime
+  fileUrl    String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([employeeId])
+}
+
+model Document {
+  id         String   @id @default(cuid())
+  employeeId String
+  employee   Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  title      String
+  fileUrl    String
+  uploadedAt DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([employeeId])
 }
