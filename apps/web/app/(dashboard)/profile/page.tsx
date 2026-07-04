@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { Mail, Phone, MapPin, User, Briefcase, FileText, Loader2, AlertTriangle } from "lucide-react"
+import { Mail, Phone, MapPin, User, Briefcase, FileText, Wallet, Loader2, AlertTriangle } from "lucide-react"
 
 import { Badge } from "@/components/ui/badge"
 import {
@@ -17,6 +17,7 @@ import {
 import { ResumeTab } from "@/components/profile/resume"
 import { PrivateInfoTab } from "@/components/profile/private-info"
 import { DocumentsTab } from "@/components/profile/documents"
+import { SalaryInfoTab } from "@/components/profile/salary-info"
 import api from "@/lib/api"
 
 interface Skill {
@@ -121,7 +122,7 @@ export default function ProfilePage() {
     [profile],
   )
 
-  const tabList = ["Resume", "Private Info", "Documents"]
+  const tabList = ["Resume", "Private Info", "Salary Info", "Documents"]
   const [activeTab, setActiveTab] = React.useState(tabList[0])
 
   if (loading) {
@@ -196,6 +197,7 @@ export default function ProfilePage() {
               <TabsTrigger key={tab} value={tab} className="flex-1">
                 {tab === "Resume" && <FileText className="mr-1.5 size-3.5" />}
                 {tab === "Private Info" && <User className="mr-1.5 size-3.5" />}
+                {tab === "Salary Info" && <Wallet className="mr-1.5 size-3.5" />}
                 {tab === "Documents" && <Briefcase className="mr-1.5 size-3.5" />}
                 {tab}
               </TabsTrigger>
@@ -214,6 +216,10 @@ export default function ProfilePage() {
 
           <TabsContent value="Private Info">
             <PrivateInfoTab profile={profile} onSave={handleFieldSave} />
+          </TabsContent>
+
+          <TabsContent value="Salary Info">
+            <SalaryInfoTab />
           </TabsContent>
 
           <TabsContent value="Documents">
