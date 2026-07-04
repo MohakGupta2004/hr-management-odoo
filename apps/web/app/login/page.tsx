@@ -45,7 +45,7 @@ export default function LoginPage() {
     setError(null)
     try {
       await login(data.identifier, data.password)
-      router.push("/dashboard")
+      router.push("/dashboard/employees")
     } catch (err: unknown) {
       const message =
         err instanceof Error ? err.message : "Login failed"

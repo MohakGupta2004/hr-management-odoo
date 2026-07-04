@@ -25,6 +25,7 @@ import {
   AvatarFallback,
 } from "@/components/ui/avatar"
 import { useAuth } from "@/lib/auth-context"
+import api from "@/lib/api"
 
 const NAV_ITEMS = [
   { href: "/dashboard/employees", label: "Employees" },
@@ -32,18 +33,63 @@ const NAV_ITEMS = [
   { href: "/dashboard/time-off", label: "Time Off" },
 ] as const
 
-function CheckInModal({ open, onClose }: { open: boolean; onClose: () => void }) {
-  const [status, setStatus] = React.useState<"CHECKED_IN" | "CHECKED_OUT">("CHECKED_OUT")
+interface TodayAttendance {
+  checkIn: string | null
+  checkOut: string | null
+}
+
+function todayISO() {
+  const now = new Date()
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`
+}
+
+function errorMessage(err: unknown, fallback: string) {
+  return (
+    (err as { response?: { data?: { message?: string } } })?.response?.data?.message ??
+    (err instanceof Error ? err.message : fallback)
+  )
+}
+
+function CheckInModal({
+  open,
+  onClose,
+  today,
+  refreshing,
+  onChanged,
+}: {
+  open: boolean
+  onClose: () => void
+  today: TodayAttendance | null
+  refreshing: boolean
+  onChanged: () => void
+}) {
   const [loading, setLoading] = React.useState(false)
+  const [error, setError] = React.useState<string | null>(null)
 
   if (!open) return null
 
-  const handleCheck = () => {
+  const status: "CHECKED_IN" | "COMPLETED" | "NOT_STARTED" =
+    today?.checkIn && today.checkOut
+      ? "COMPLETED"
+      : today?.checkIn
+        ? "CHECKED_IN"
+        : "NOT_STARTED"
+
+  const handleCheck = async () => {
     setLoading(true)
-    setTimeout(() => {
-      setStatus((s) => (s === "CHECKED_OUT" ? "CHECKED_IN" : "CHECKED_OUT"))
+    setError(null)
+    try {
+      if (status === "NOT_STARTED") {
+        await api.post("/attendance/check-in")
+      } else if (status === "CHECKED_IN") {
+        await api.post("/attendance/check-out")
+      }
+      onChanged()
+    } catch (err) {
+      setError(errorMessage(err, status === "NOT_STARTED" ? "Failed to check in" : "Failed to check out"))
+    } finally {
       setLoading(false)
-    }, 800)
+    }
   }
 
   return (
@@ -73,30 +119,43 @@ function CheckInModal({ open, onClose }: { open: boolean; onClose: () => void })
                 status === "CHECKED_IN" && "bg-green-600 hover:bg-green-700",
               )}
             >
-              {status === "CHECKED_IN" ? "Checked In" : "Checked Out"}
+              {status === "CHECKED_IN" ? "Checked In" : status === "COMPLETED" ? "Checked Out" : "Not Checked In"}
             </Badge>
-            {status === "CHECKED_IN" && (
+            {status === "CHECKED_IN" && today?.checkIn && (
               <span className="text-xs text-muted-foreground">
-                Since {new Date().toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })}
+                Since {today.checkIn}
+              </span>
+            )}
+            {status === "COMPLETED" && today?.checkOut && (
+              <span className="text-xs text-muted-foreground">
+                Checked out at {today.checkOut}
               </span>
             )}
           </div>
 
+          {error && (
+            <p className="flex items-center gap-1.5 text-xs text-destructive">
+              {error}
+            </p>
+          )}
+
           <Button
             className="w-full"
-            variant={status === "CHECKED_OUT" ? "default" : "outline"}
+            variant={status === "NOT_STARTED" ? "default" : "outline"}
             onClick={handleCheck}
-            disabled={loading}
+            disabled={loading || refreshing || status === "COMPLETED"}
           >
             {loading ? (
               <span className="flex items-center gap-2">
                 <span className="size-3 animate-spin rounded-full border-2 border-current border-t-transparent" />
                 Processing...
               </span>
-            ) : status === "CHECKED_OUT" ? (
+            ) : status === "NOT_STARTED" ? (
               "Check In"
-            ) : (
+            ) : status === "CHECKED_IN" ? (
               "Check Out"
+            ) : (
+              "Done for Today"
             )}
           </Button>
         </CardContent>
@@ -109,6 +168,36 @@ export function Navbar() {
   const pathname = usePathname()
   const { user, company, employee, logout } = useAuth()
   const [checkInOpen, setCheckInOpen] = React.useState(false)
+  const [today, setToday] = React.useState<TodayAttendance | null>(null)
+  const [refreshing, setRefreshing] = React.useState(true)
+
+  const fetchToday = React.useCallback(() => {
+    setRefreshing(true)
+    const now = new Date()
+    api
+      .get("/attendance/me", {
+        params: { month: now.getMonth() + 1, year: now.getFullYear(), page: 1, limit: 31 },
+      })
+      .then((res) => {
+        const records: Array<{ date: string; checkIn: string | null; checkOut: string | null }> =
+          res.data.records ?? []
+        const record = records.find((r) => r.date === todayISO())
+        setToday(record ? { checkIn: record.checkIn, checkOut: record.checkOut } : { checkIn: null, checkOut: null })
+      })
+      .catch(() => setToday(null))
+      .finally(() => setRefreshing(false))
+  }, [])
+
+  React.useEffect(() => {
+    fetchToday()
+  }, [fetchToday])
+
+  const navStatus: "CHECKED_IN" | "COMPLETED" | "NOT_STARTED" =
+    today?.checkIn && today.checkOut
+      ? "COMPLETED"
+      : today?.checkIn
+        ? "CHECKED_IN"
+        : "NOT_STARTED"
 
   const initials = employee
     ? `${employee.firstName[0]}${employee.lastName[0]}`.toUpperCase()
@@ -152,7 +241,7 @@ export function Navbar() {
           <div className="flex items-center gap-3">
             <Button variant="outline" size="sm" onClick={() => setCheckInOpen(true)}>
               <Clock className="mr-1.5 size-3.5" />
-              Check In
+              {navStatus === "CHECKED_IN" ? "Check Out" : navStatus === "COMPLETED" ? "Attendance" : "Check In"}
             </Button>
 
               <DropdownMenu>
@@ -185,7 +274,13 @@ export function Navbar() {
         </div>
       </header>
 
-      <CheckInModal open={checkInOpen} onClose={() => setCheckInOpen(false)} />
+      <CheckInModal
+        open={checkInOpen}
+        onClose={() => setCheckInOpen(false)}
+        today={today}
+        refreshing={refreshing}
+        onChanged={fetchToday}
+      />
     </>
   )
 }
