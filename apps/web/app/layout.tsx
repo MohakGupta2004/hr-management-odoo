@@ -3,6 +3,7 @@ import { Geist, Geist_Mono, Inter } from "next/font/google";
 import "./globals.css";
 import { cn } from "@/lib/utils";
 import {ThemeProvider as NextThemeProvider} from 'next-themes'
+import { ThemeToggle } from "@/components/theme-toggle"
 const inter = Inter({subsets:['latin'],variable:'--font-sans'});
 
 const geistSans = Geist({
@@ -28,6 +29,7 @@ export default function RootLayout({
   return (
     <html
       lang="en"
+      suppressHydrationWarning
       className={cn("h-full", "antialiased", geistSans.variable, geistMono.variable, "font-sans", inter.variable)}
     >
       <body className="min-h-full flex flex-col">
@@ -36,6 +38,9 @@ attribute="class"
 defaultTheme="dark"
 enableSystem
 >
+<div className="fixed top-4 right-4 z-50">
+  <ThemeToggle />
+</div>
 {children}
 </NextThemeProvider>
 
