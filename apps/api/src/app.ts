@@ -7,6 +7,7 @@ import { usersRouter } from "./modules/users/users.router";
 import { authRouter } from "./modules/auth/auth.route";
 import { employeeRouter } from "./modules/employee/employee.route";
 import { attendanceRouter } from "./modules/attendance/attendance.routes";
+import { leaveRouter } from "./modules/leave/leave.routes";
 
 import { ZodError } from "zod";
 import { AppError } from "./utils/errors";
@@ -33,6 +34,7 @@ app.use("/users", usersRouter);
 app.use("/auth", authRouter);
 app.use("/employees", employeeRouter);
 app.use("/attendance", attendanceRouter);
+app.use("/leaves", leaveRouter);
 
 app.use((req: Request, res: Response) => {
   res.status(404).json({ error: "Endpoint not found" });

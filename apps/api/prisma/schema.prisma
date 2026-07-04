@@ -36,6 +36,16 @@ enum AttendanceStatus {
   LEAVE
   WEEKEND
 }
+enum LeaveType {
+  PAID
+  SICK
+  CASUAL
+}
+enum LeaveStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
 
 model Company {
   id        String   @id @default(cuid())
@@ -181,11 +191,11 @@ model Employee {
 
   attendances Attendance[]
 
-  // leaveRequests LeaveRequest[] @relation("Requester")
+  leaveRequests LeaveRequest[] @relation("Requester")
 
-  // approvedRequests LeaveRequest[] @relation("Approver")
+  approvedLeaves LeaveRequest[] @relation("Approver")
 
-  // leaveAllocations LeaveAllocation[]
+  leaveAllocations LeaveAllocation[]
 
   // salaryStructure SalaryStructure?
 
@@ -266,4 +276,49 @@ model Attendance {
   @@index([employeeId])
   @@index([date])
   @@index([status])
+}
+
+model LeaveAllocation {
+  id         String   @id @default(cuid())
+  employeeId String
+  employee   Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  leaveType LeaveType
+  year      Int
+
+  totalDays Int
+  usedDays  Int @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([employeeId, leaveType, year])
+  @@index([employeeId])
+}
+
+model LeaveRequest {
+  id         String   @id @default(cuid())
+  employeeId String
+  employee   Employee @relation("Requester", fields: [employeeId], references: [id], onDelete: Cascade)
+
+  leaveType LeaveType
+  startDate DateTime
+  endDate   DateTime
+  days      Int
+  reason    String
+
+  status LeaveStatus @default(PENDING)
+
+  approvedById String?
+  approvedBy   Employee? @relation("Approver", fields: [approvedById], references: [id])
+  approvedAt   DateTime?
+
+  decisionReason String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([employeeId])
+  @@index([status])
+  @@index([approvedById])
 }

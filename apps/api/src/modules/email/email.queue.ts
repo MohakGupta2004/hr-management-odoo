@@ -32,12 +32,42 @@ export interface SendWelcomeEmailJobData {
   temporaryPassword: string;
 }
 
+export interface SendLeaveRequestedEmailJobData {
+  to: string;
+  adminName: string;
+  employeeName: string;
+  leaveType: string;
+  startDate: string;
+  endDate: string;
+  days: number;
+  reason: string;
+}
+
+export interface SendLeaveDecisionEmailJobData {
+  to: string;
+  employeeName: string;
+  leaveType: string;
+  startDate: string;
+  endDate: string;
+  days: number;
+  status: "APPROVED" | "REJECTED";
+  decisionReason?: string;
+}
+
 export async function addEmailToQueue(data: SendVerificationEmailJobData) {
   await emailQueue.add("sendVerificationEmail", data);
 }
 
 export async function addWelcomeEmailToQueue(data: SendWelcomeEmailJobData) {
   await emailQueue.add("sendWelcomeEmail", data);
+}
+
+export async function addLeaveRequestedEmailToQueue(data: SendLeaveRequestedEmailJobData) {
+  await emailQueue.add("sendLeaveRequestedEmail", data);
+}
+
+export async function addLeaveDecisionEmailToQueue(data: SendLeaveDecisionEmailJobData) {
+  await emailQueue.add("sendLeaveDecisionEmail", data);
 }
 
 export async function closeEmailQueue() {

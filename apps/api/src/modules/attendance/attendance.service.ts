@@ -156,6 +156,38 @@ export class AttendanceService {
     };
   }
 
+  /**
+   * Marks a date range as LEAVE for an employee. This is the single entry point for
+   * other bounded contexts (e.g. Leave) to write attendance rows — attendance logic
+   * stays owned by this module. Must be called inside a transaction so it commits
+   * atomically with the caller's own writes (balance decrement, request status, etc).
+   *
+   * Existing rows (e.g. an ABSENT day) are upserted to LEAVE, clearing any timings.
+   */
+  async markLeave(tx: Prisma.TransactionClient, employeeId: string, startDate: Date, endDate: Date) {
+    const start = toDateOnly(startDate);
+    const end = toDateOnly(endDate);
+
+    for (let d = new Date(start); d.getTime() <= end.getTime(); d.setUTCDate(d.getUTCDate() + 1)) {
+      const date = new Date(d);
+      await tx.attendance.upsert({
+        where: { employeeId_date: { employeeId, date } },
+        create: {
+          employeeId,
+          date,
+          status: "LEAVE",
+        },
+        update: {
+          status: "LEAVE",
+          checkIn: null,
+          checkOut: null,
+          workingMinutes: null,
+          overtimeMinutes: null,
+        },
+      });
+    }
+  }
+
   async getMyAttendance(userId: string, params: AttendanceHistoryQuery) {
     const employee = await this.getEmployeeByUserId(userId);
     return this.getHistory(employee.id, params);
