@@ -157,9 +157,11 @@ export function Navbar() {
               <DropdownMenuContent align="end" className="w-40">
                 <DropdownMenuLabel className="text-xs font-medium text-muted-foreground">Admin User</DropdownMenuLabel>
                 <DropdownMenuSeparator />
-                <DropdownMenuItem>
-                  <User className="mr-2 size-3.5" />
-                  My Profile
+                <DropdownMenuItem asChild>
+                  <Link href="/profile">
+                    <User className="mr-2 size-3.5" />
+                    My Profile
+                  </Link>
                 </DropdownMenuItem>
                 <DropdownMenuItem className="text-destructive focus:text-destructive">
                   <LogOut className="mr-2 size-3.5" />
