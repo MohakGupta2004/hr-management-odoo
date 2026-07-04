@@ -1,3 +1,4 @@
+import { Navbar } from "@/components/navbar";
 import * as React from "react"
 
 export default function DashboardLayout({
@@ -5,5 +6,8 @@ export default function DashboardLayout({
 }: {
   children: React.ReactNode
 }) {
-  return <div className="flex-1 flex flex-col">{children}</div>
+  return <div className="flex-1 flex flex-col">
+  <Navbar/>
+  {children}
+  </div>
 }
