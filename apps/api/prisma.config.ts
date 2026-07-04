@@ -1,5 +1,5 @@
 import "dotenv/config";
-import { defineConfig, env } from "prisma/config";
+import { defineConfig } from "prisma/config";
 
 export default defineConfig({
   schema: "prisma/schema.prisma",
@@ -7,6 +7,9 @@ export default defineConfig({
     path: "prisma/migrations",
   },
   datasource: {
-    url: env("DATABASE_URL"),
+    // Migrations / db push use a direct (unpooled) connection when available.
+    // PgBouncer transaction pooling (Neon's -pooler host) doesn't support the
+    // advisory locks / DDL session state Prisma needs; DATABASE_URL is the fallback.
+    url: process.env.DIRECT_URL || process.env.DATABASE_URL || "",
   },
 });
