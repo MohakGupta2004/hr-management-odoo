@@ -3,6 +3,7 @@ import type { Request, Response, NextFunction } from "express";
 import cors from "cors";
 import { usersRouter } from "./modules/users/users.router";
 import { authRouter } from "./modules/auth/auth.route";
+import { employeeRouter } from "./modules/employee/employee.route";
 
 import { AppError } from "./utils/errors";
 
@@ -20,6 +21,7 @@ app.use((err: any, req: Request, res: Response, next: NextFunction) => {
 
 app.use("/users", usersRouter);
 app.use("/auth", authRouter);
+app.use("/employees", employeeRouter);
 
 app.use((req: Request, res: Response) => {
   res.status(404).json({ error: "Endpoint not found" });

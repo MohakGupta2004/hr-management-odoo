@@ -6,6 +6,7 @@ import bcrypt from "bcrypt";
 import { Prisma } from "../../../generated/prisma/client";
 import { generateAccessToken, generateRefreshToken, verifyRefreshToken } from "../../utils/jwt";
 import jwt from "jsonwebtoken";
+import { IdentityService } from "../identity/identity.service";
 
 export interface RegisterCompanyInput {
   companyName: string;
@@ -17,6 +18,8 @@ export interface RegisterCompanyInput {
 }
 
 export class AuthService {
+  private identityService = new IdentityService();
+
   async registerCompany(data: RegisterCompanyInput) {
     const cleanName = data.companyName
       .replace(/\b(pvt|ltd|inc|co|gmbh|llc|private|limited)\b/gi, "")
@@ -54,25 +57,10 @@ export class AuthService {
         const nameParts = data.fullName.trim().split(/\s+/);
         const firstName = nameParts[0] || "Admin";
         const lastName = nameParts.slice(1).join(" ") || "User";
-
-        const fnPart = firstName.substring(0, 2).toUpperCase().padEnd(2, "X");
-        const lnPart = lastName.substring(0, 2).toUpperCase().padEnd(2, "X");
         const year = new Date().getFullYear();
 
-        // Safe query inside transaction to determine MAX serial
-        const lastEmployee = await tx.employee.findFirst({
-          where: {
-            companyId: company.id,
-            joiningYear: year,
-          },
-          orderBy: {
-            joiningSerial: "desc",
-          },
-        });
-
-        const serial = lastEmployee ? lastEmployee.joiningSerial + 1 : 1;
-        const serialStr = String(serial).padStart(4, "0");
-        const loginId = `${prefix}${fnPart}${lnPart}${year}${serialStr}`;
+        const serial = await this.identityService.getNextJoiningSerial(tx, company.id, year);
+        const loginId = this.identityService.generateLoginId(prefix, firstName, lastName, year, serial);
 
         // Create user. Unique check handled by DB constraints.
         const user = await tx.user.create({

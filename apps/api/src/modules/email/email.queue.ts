@@ -25,8 +25,19 @@ export interface SendVerificationEmailJobData {
   token: string;
 }
 
+export interface SendWelcomeEmailJobData {
+  email: string;
+  fullName: string;
+  loginId: string;
+  temporaryPassword: string;
+}
+
 export async function addEmailToQueue(data: SendVerificationEmailJobData) {
   await emailQueue.add("sendVerificationEmail", data);
+}
+
+export async function addWelcomeEmailToQueue(data: SendWelcomeEmailJobData) {
+  await emailQueue.add("sendWelcomeEmail", data);
 }
 
 export async function closeEmailQueue() {

@@ -9,7 +9,7 @@ datasource db {
 
 enum Role {
   ADMIN
-  HR_OFFICER
+  MANAGER
   EMPLOYEE
 }
 enum EmploymentStatus {
