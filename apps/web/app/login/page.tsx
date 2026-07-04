@@ -4,6 +4,7 @@ import * as React from "react"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { z } from "zod"
+import { useRouter } from "next/navigation"
 
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
@@ -17,16 +18,20 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card"
+import { useAuth } from "@/lib/auth-context"
 
 const loginSchema = z.object({
-  email: z.string().email("Invalid email address"),
+  identifier: z.string().min(1, "Email or Login ID is required"),
   password: z.string().min(8, "Password must be at least 8 characters"),
 })
 
 type LoginFormData = z.infer<typeof loginSchema>
 
 export default function LoginPage() {
+  const router = useRouter()
+  const { login } = useAuth()
   const [showPassword, setShowPassword] = React.useState(false)
+  const [error, setError] = React.useState<string | null>(null)
 
   const {
     register,
@@ -37,7 +42,15 @@ export default function LoginPage() {
   })
 
   const onSubmit = async (data: LoginFormData) => {
-    console.log(data)
+    setError(null)
+    try {
+      await login(data.identifier, data.password)
+      router.push("/dashboard")
+    } catch (err: unknown) {
+      const message =
+        err instanceof Error ? err.message : "Login failed"
+      setError(message)
+    }
   }
 
   return (
@@ -53,21 +66,21 @@ export default function LoginPage() {
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
             <div className="space-y-2">
               <label
-                htmlFor="email"
+                htmlFor="identifier"
                 className="text-sm font-medium text-foreground"
               >
-                Email
+                Email or Login ID
               </label>
               <Input
-                id="email"
-                type="email"
+                id="identifier"
+                type="text"
                 placeholder="name@company.com"
-                {...register("email")}
-                aria-invalid={errors.email ? "true" : undefined}
+                {...register("identifier")}
+                aria-invalid={errors.identifier ? "true" : undefined}
               />
-              {errors.email && (
+              {errors.identifier && (
                 <p className="text-xs text-destructive">
-                  {errors.email.message}
+                  {errors.identifier.message}
                 </p>
               )}
             </div>
@@ -110,6 +123,9 @@ export default function LoginPage() {
                 </p>
               )}
             </div>
+            {error && (
+              <p className="text-xs text-destructive text-center">{error}</p>
+            )}
             <Button type="submit" className="w-full" disabled={isSubmitting}>
               {isSubmitting ? "Signing in..." : "Sign in"}
             </Button>

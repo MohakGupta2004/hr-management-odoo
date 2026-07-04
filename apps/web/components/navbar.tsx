@@ -24,6 +24,7 @@ import {
   Avatar,
   AvatarFallback,
 } from "@/components/ui/avatar"
+import { useAuth } from "@/lib/auth-context"
 
 const NAV_ITEMS = [
   { href: "/dashboard/employees", label: "Employees" },
@@ -106,7 +107,15 @@ function CheckInModal({ open, onClose }: { open: boolean; onClose: () => void })
 
 export function Navbar() {
   const pathname = usePathname()
+  const { user, company, employee, logout } = useAuth()
   const [checkInOpen, setCheckInOpen] = React.useState(false)
+
+  const initials = employee
+    ? `${employee.firstName[0]}${employee.lastName[0]}`.toUpperCase()
+    : user?.loginId?.slice(0, 2).toUpperCase() ?? "??"
+  const displayName = employee
+    ? `${employee.firstName} ${employee.lastName}`
+    : user?.email ?? "User"
 
   return (
     <>
@@ -146,29 +155,32 @@ export function Navbar() {
               Check In
             </Button>
 
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <button className="rounded-full outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2">
-                  <Avatar size="sm">
-                    <AvatarFallback className="text-xs">AD</AvatarFallback>
-                  </Avatar>
-                </button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-40">
-                <DropdownMenuLabel className="text-xs font-medium text-muted-foreground">Admin User</DropdownMenuLabel>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem asChild>
-                  <Link href="/profile">
-                    <User className="mr-2 size-3.5" />
-                    My Profile
-                  </Link>
-                </DropdownMenuItem>
-                <DropdownMenuItem className="text-destructive focus:text-destructive">
-                  <LogOut className="mr-2 size-3.5" />
-                  Logout
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button className="rounded-full outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2">
+                    <Avatar size="sm">
+                      <AvatarFallback className="text-xs">{initials}</AvatarFallback>
+                    </Avatar>
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-40">
+                  <DropdownMenuLabel className="text-xs font-medium text-muted-foreground">{displayName}</DropdownMenuLabel>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem asChild>
+                    <Link href="/profile">
+                      <User className="mr-2 size-3.5" />
+                      My Profile
+                    </Link>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    className="text-destructive focus:text-destructive"
+                    onClick={() => logout()}
+                  >
+                    <LogOut className="mr-2 size-3.5" />
+                    Logout
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
           </div>
         </div>
       </header>

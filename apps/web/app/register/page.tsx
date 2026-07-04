@@ -4,6 +4,7 @@ import * as React from "react"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { z } from "zod"
+import { useRouter } from "next/navigation"
 
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -16,6 +17,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card"
+import api from "@/lib/api"
 
 const registerSchema = z
   .object({
@@ -50,9 +52,11 @@ const countryCodes = [
 ]
 
 export default function RegisterPage() {
+  const router = useRouter()
   const [showPassword, setShowPassword] = React.useState(false)
   const [showConfirmPassword, setShowConfirmPassword] = React.useState(false)
   const [logoPreview, setLogoPreview] = React.useState<string | null>(null)
+  const [error, setError] = React.useState<string | null>(null)
   const fileInputRef = React.useRef<HTMLInputElement>(null)
 
   const {
@@ -64,8 +68,26 @@ export default function RegisterPage() {
   })
 
   const onSubmit = async (data: RegisterFormData) => {
-    const payload = { ...data, phone: `${data.phoneCode} ${data.phoneNumber}` }
-    console.log(payload)
+    setError(null)
+    const payload = {
+      companyName: data.companyName,
+      logo: logoPreview || "",
+      fullName: data.name,
+      email: data.email,
+      phone: `${data.phoneCode}${data.phoneNumber}`,
+      password: data.password,
+      confirmPassword: data.confirmPassword,
+    }
+
+    try {
+      const response = await api.post("/auth/register-company", payload)
+      console.log(response.data)
+      router.push("/login")
+    } catch (err: unknown) {
+      const message =
+        err instanceof Error ? err.message : "Registration failed"
+      setError(message)
+    }
   }
 
   const handleLogoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -278,6 +300,9 @@ export default function RegisterPage() {
                 </p>
               )}
             </div>
+            {error && (
+              <p className="text-xs text-destructive text-center">{error}</p>
+            )}
             <Button type="submit" className="w-full" disabled={isSubmitting}>
               {isSubmitting ? "Creating account..." : "Create account"}
             </Button>

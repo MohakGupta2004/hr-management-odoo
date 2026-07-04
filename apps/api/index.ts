@@ -3,9 +3,7 @@ import { config } from "./src/config/config";
 import { disconnectDb } from "./src/db/prisma";
 import { startEmailWorker } from "./src/modules/email/email.worker";
 import { closeEmailQueue, redisConnection } from "./src/modules/email/email.queue";
-
 const emailWorker = startEmailWorker();
-
 const server = app.listen(config.port, () => {
   console.log(`Server is running on port ${config.port}`);
 });

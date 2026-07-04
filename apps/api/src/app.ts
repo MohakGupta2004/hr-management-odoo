@@ -24,8 +24,14 @@ const uploadDir = path.join(__dirname, "../uploads");
 if (!fs.existsSync(uploadDir)) {
   fs.mkdirSync(uploadDir, { recursive: true });
 }
-
-app.use(cors());
+const corsOptions: cors.CorsOptions = {
+  origin: ['http://localhost:3000'], // Trusted origins
+  methods: ['GET', 'POST', 'PUT', 'DELETE'],                         // Allowed HTTP methods
+  allowedHeaders: ['Content-Type', 'Authorization'],                 // Allowed custom headers
+  credentials: true,                                                 // Allows cookies or sessions
+  optionsSuccessStatus: 200                                          // Compatibility for legacy browsers
+};
+app.use(cors(corsOptions));
 app.use(express.json());
 app.use("/uploads", express.static(uploadDir));
 
