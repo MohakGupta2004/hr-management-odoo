@@ -17,3 +17,15 @@ export class ConflictError extends AppError {
     super(409, message);
   }
 }
+
+export class UnauthorizedError extends AppError {
+  constructor(message: string = "Unauthorized") {
+    super(401, message);
+  }
+}
+
+export class ForbiddenError extends AppError {
+  constructor(message: string = "Forbidden") {
+    super(403, message);
+  }
+}

@@ -3,6 +3,7 @@ import { z } from "zod";
 import { AuthService } from "./auth.service";
 import { addEmailToQueue } from "../email/email.queue";
 import { BadRequestError } from "../../utils/errors";
+import type { AuthenticatedRequest } from "../../middleware/auth.middleware";
 
 const registerCompanySchema = z.object({
   companyName: z.string().trim().min(1, "Company name is required"),
@@ -20,6 +21,15 @@ const registerCompanySchema = z.object({
 }).refine((data) => data.password === data.confirmPassword, {
   message: "Passwords do not match",
   path: ["confirmPassword"],
+});
+
+const loginSchema = z.object({
+  identifier: z.string().trim().min(1, "Identifier is required"),
+  password: z.string().min(1, "Password is required"),
+});
+
+const refreshTokenSchema = z.object({
+  refreshToken: z.string().trim().min(1, "Refresh token is required"),
 });
 
 export class AuthController {
@@ -63,6 +73,81 @@ export class AuthController {
       await this.authService.verifyEmail(token);
 
       res.status(200).json({ message: "Email verified successfully." });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  login = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const validation = loginSchema.safeParse(req.body);
+      if (!validation.success) {
+        const errorMsg = validation.error.issues[0]?.message || "Validation failed";
+        throw new BadRequestError(errorMsg);
+      }
+
+      const ipAddress =
+        (req.headers["x-forwarded-for"] as string)?.split(",")[0]?.trim() ||
+        req.socket.remoteAddress ||
+        undefined;
+      const userAgent = req.headers["user-agent"] || undefined;
+
+      const result = await this.authService.login(validation.data, ipAddress, userAgent);
+      res.status(200).json(result);
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  refreshToken = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const validation = refreshTokenSchema.safeParse(req.body);
+      if (!validation.success) {
+        const errorMsg = validation.error.issues[0]?.message || "Validation failed";
+        throw new BadRequestError(errorMsg);
+      }
+
+      const ipAddress =
+        (req.headers["x-forwarded-for"] as string)?.split(",")[0]?.trim() ||
+        req.socket.remoteAddress ||
+        undefined;
+      const userAgent = req.headers["user-agent"] || undefined;
+
+      const result = await this.authService.refreshToken(
+        validation.data.refreshToken,
+        ipAddress,
+        userAgent
+      );
+      res.status(200).json(result);
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  logout = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const validation = refreshTokenSchema.safeParse(req.body);
+      if (!validation.success) {
+        const errorMsg = validation.error.issues[0]?.message || "Validation failed";
+        throw new BadRequestError(errorMsg);
+      }
+
+      await this.authService.logout(validation.data.refreshToken);
+      res.status(200).json({ message: "Logged out successfully." });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  me = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+    try {
+      const userId = req.user?.userId;
+      if (!userId) {
+        throw new BadRequestError("User context not available");
+      }
+
+      const user = await this.authService.getCurrentUser(userId);
+      res.status(200).json(user);
     } catch (error) {
       next(error);
     }
