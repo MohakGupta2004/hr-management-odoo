@@ -4,11 +4,7 @@ import { config } from "../../config/config";
 const resend = new Resend(config.resendApiKey);
 
 export class EmailService {
-  /**
-   * Sends the verification email containing the link to the frontend route.
-   * Flow: Link directs user to frontend `/verify?token=<token>`, which must call
-   * backend GET `/auth/verify?token=<token>` to complete verification.
-   */
+  // Sends the email-verification link (frontend /verify?token=...).
   async sendVerificationEmail(toEmail: string, fullName: string, token: string): Promise<void> {
     const verificationLink = `${config.frontendUrl}/verify?token=${token}`;
 
@@ -39,9 +35,7 @@ export class EmailService {
     });
   }
 
-  /**
-   * Sends the welcome email containing the login ID and temporary password.
-   */
+  // Sends the welcome email with login ID and temporary password.
   async sendWelcomeEmail(toEmail: string, fullName: string, loginId: string, temporaryPassword: string): Promise<void> {
     const loginLink = `${config.frontendUrl}/login`;
 
@@ -72,9 +66,7 @@ export class EmailService {
     });
   }
 
-  /**
-   * Notifies an admin that an employee has submitted a leave request awaiting review.
-   */
+  // Notifies an admin of a pending leave request.
   async sendLeaveRequestedEmail(data: {
     to: string;
     adminName: string;
@@ -115,9 +107,7 @@ export class EmailService {
     });
   }
 
-  /**
-   * Notifies an employee that their leave request has been approved or rejected.
-   */
+  // Notifies an employee of a leave approval/rejection.
   async sendLeaveDecisionEmail(data: {
     to: string;
     employeeName: string;

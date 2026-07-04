@@ -13,7 +13,7 @@ import type {
   ListLeavesQuery,
 } from "./leave.validation";
 
-/** Parse a YYYY-MM-DD string into a UTC date-only instant (no timezone drift). */
+// Parse YYYY-MM-DD to a UTC date-only instant (no timezone drift).
 function parseDateOnly(input: string): Date {
   const [y, m, d] = input.split("-").map(Number);
   return new Date(Date.UTC(y!, m! - 1, d!));
@@ -24,7 +24,7 @@ function todayDateOnly(): Date {
   return new Date(Date.UTC(n.getUTCFullYear(), n.getUTCMonth(), n.getUTCDate()));
 }
 
-/** Inclusive whole-day count. Jul-10 -> Jul-12 = 3. */
+// Inclusive whole-day count. Jul-10 -> Jul-12 = 3.
 function countInclusiveDays(start: Date, end: Date): number {
   return Math.floor((end.getTime() - start.getTime()) / 86_400_000) + 1;
 }
@@ -92,7 +92,7 @@ export class LeaveService {
     return employee;
   }
 
-  // ---- Allocations -----------------------------------------------------------
+  // ---- Allocations ----
 
   async allocateLeave(companyId: string, data: AllocateLeaveInput) {
     const employee = await prisma.employee.findFirst({
@@ -160,7 +160,7 @@ export class LeaveService {
     return allocations.map(formatAllocation);
   }
 
-  // ---- Requests --------------------------------------------------------------
+  // ---- Requests ----
 
   async applyLeave(userId: string, input: ApplyLeaveInput) {
     const employee = await this.getEmployeeByUserId(userId);
@@ -389,7 +389,7 @@ export class LeaveService {
     return formatLeave(fresh);
   }
 
-  // ---- Notifications (Redis queue) ------------------------------------------
+  // ---- Notifications (Redis queue) ----
 
   private async notifyAdminsOfRequest(
     employee: { id: string; userId: string; companyId: string; firstName: string; lastName: string },

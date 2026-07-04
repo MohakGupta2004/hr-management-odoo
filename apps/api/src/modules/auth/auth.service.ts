@@ -194,7 +194,7 @@ export class AuthService {
       throw new UnauthorizedError("Invalid credentials");
     }
 
-    // Pre-generate session ID and refresh token BEFORE transaction to keep transactions atomic
+    // Pre-generate before the transaction to keep it atomic.
     const sessionId = crypto.randomUUID();
     const tokenPayload = {
       sub: user.id,
@@ -391,7 +391,7 @@ export class AuthService {
 
     return {
       ...user,
-      // TODO: Query dynamic attendance status from the database once the Attendance module is implemented
+      // TODO: derive from Attendance module (currently hardcoded)
       attendanceStatus: "CHECKED_OUT" as const,
     };
   }

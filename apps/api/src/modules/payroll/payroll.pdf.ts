@@ -36,9 +36,7 @@ async function fetchLogo(url: string | null): Promise<Buffer | null> {
   }
 }
 
-/**
- * Renders a payslip PDF entirely in memory and resolves with the resulting Buffer.
- */
+// Renders a payslip PDF in memory and resolves with the Buffer.
 export async function generatePayslipPdf(data: PayslipPdfData): Promise<Buffer> {
   const logo = await fetchLogo(data.company.logoUrl);
 

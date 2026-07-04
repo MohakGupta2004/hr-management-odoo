@@ -27,9 +27,6 @@ payrollRouter.post("/generate", adminOnly, controller.generatePayslip);
 // ---- /payslips ----
 export const payslipRouter = Router();
 payslipRouter.use(requireAuth);
-// Self-service first (literal path before the "/:id/..." param route)
-payslipRouter.get("/me", controller.getMyPayslips);
-// Owner (self) or admin — ownership enforced in the service
-payslipRouter.get("/:id/pdf", controller.getPayslipPdf);
-// Admin history
+payslipRouter.get("/me", controller.getMyPayslips); // before "/:id/..."
+payslipRouter.get("/:id/pdf", controller.getPayslipPdf); // owner or admin (checked in service)
 payslipRouter.get("/", adminOnly, controller.listPayslips);

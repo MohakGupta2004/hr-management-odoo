@@ -13,9 +13,7 @@ export interface CloudinaryUploadResult {
   public_id: string;
 }
 
-/**
- * Uploads a file buffer directly to Cloudinary using streams
- */
+// Streams a file buffer to Cloudinary.
 export function uploadToCloudinary(fileBuffer: Buffer, folder: string = "documents"): Promise<CloudinaryUploadResult> {
   return new Promise((resolve, reject) => {
     const uploadStream = cloudinary.uploader.upload_stream(
@@ -40,9 +38,7 @@ export function uploadToCloudinary(fileBuffer: Buffer, folder: string = "documen
   });
 }
 
-/**
- * Deletes an asset from Cloudinary using its public ID
- */
+// Deletes an asset by public ID.
 export function deleteFromCloudinary(publicId: string): Promise<any> {
   return new Promise((resolve, reject) => {
     cloudinary.uploader.destroy(publicId, (error, result) => {
@@ -52,23 +48,20 @@ export function deleteFromCloudinary(publicId: string): Promise<any> {
   });
 }
 
-/**
- * Extracts Cloudinary public ID from a secure URL
- * E.g., https://res.cloudinary.com/dp5ji5vpu/image/upload/v1625068781/documents/xyz.pdf -> documents/xyz
- */
+// Extracts the public ID from a secure URL (.../upload/v123/documents/xyz.pdf -> documents/xyz).
 export function getPublicIdFromUrl(url: string): string {
   const parts = url.split("/upload/");
   if (parts.length < 2 || !parts[1]) return "";
-  
+
   let pathWithExt: string = parts[1];
-  // Remove version prefix if exists (v12345678/)
+  // Strip version prefix (v12345678/)
   const firstSlash = pathWithExt.indexOf("/");
   const prefix = pathWithExt.substring(0, firstSlash);
   if (prefix.startsWith("v")) {
     pathWithExt = pathWithExt.substring(firstSlash + 1);
   }
-  
-  // Remove extension
+
+  // Strip extension
   const lastDot = pathWithExt.lastIndexOf(".");
   if (lastDot !== -1) {
     return pathWithExt.substring(0, lastDot);

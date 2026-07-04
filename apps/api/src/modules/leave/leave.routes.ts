@@ -7,14 +7,12 @@ const leaveController = new LeaveController();
 
 leaveRouter.use(requireAuth);
 
-// ---- Employee self-service (any authenticated employee) ----
+// ---- Employee self-service ----
 leaveRouter.post("/", leaveController.applyLeave);
 leaveRouter.get("/me", leaveController.getMyLeaves);
 leaveRouter.get("/allocations/me", leaveController.getMyAllocations);
 
-// ---- Admin (HR) only ----
-// NOTE: literal paths ("/pending", "/allocations/...") are declared before the
-// "/:id/..." param routes so Express doesn't swallow them as an :id.
+// ---- Admin (HR) only ---- (literal paths before "/:id/..." param routes)
 leaveRouter.post("/allocations", requireRole(["ADMIN"]), leaveController.allocateLeave);
 leaveRouter.get("/allocations/:employeeId", requireRole(["ADMIN"]), leaveController.getEmployeeAllocations);
 leaveRouter.get("/pending", requireRole(["ADMIN"]), leaveController.getPendingLeaves);

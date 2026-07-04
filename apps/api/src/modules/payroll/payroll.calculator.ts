@@ -1,24 +1,5 @@
-/**
- * PayrollCalculator — the pure calculation layer for payroll.
- *
- * It has NO knowledge of the database, HTTP, or Prisma. It accepts structured
- * inputs (salary components + attendance summary) and returns a fully-computed,
- * serializable breakdown. Keeping payroll policy isolated here means deduction
- * rules, LOP (loss-of-pay) logic, bonuses or tax slabs can change without
- * touching the service or controller layers.
- *
- * Policy implemented (kept intentionally simple, matching the project spec):
- *   grossSalary      = Σ EARNING components
- *   componentDeducts = Σ DEDUCTION components
- *   perDaySalary     = round(grossSalary / workingDays)
- *   lossOfPay        = absentDays * perDaySalary        (only explicit ABSENT days)
- *   totalDeductions  = componentDeducts + lossOfPay
- *   netSalary        = grossSalary - totalDeductions
- *
- * Approved (paid) leave and present days are NOT deducted. "workingDays" is the
- * number of calendar days in the payroll month; weekend/holiday-aware working-day
- * calculation is a deliberate future enhancement.
- */
+// Pure payroll math: takes salary components + attendance, returns the breakdown.
+// net = gross(earnings) - deductions - lossOfPay, where lossOfPay = absentDays * perDay.
 
 export type SalaryComponentType = "EARNING" | "DEDUCTION";
 

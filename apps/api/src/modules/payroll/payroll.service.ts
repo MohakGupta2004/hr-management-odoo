@@ -41,7 +41,7 @@ function formatStructure(s: {
 export class PayrollService {
   private calculator = new PayrollCalculator();
 
-  // ---- Salary Structure ------------------------------------------------------
+  // ---- Salary Structure ----
 
   async createSalaryStructure(companyId: string, data: CreateSalaryStructureInput) {
     const employee = await prisma.employee.findFirst({ where: { id: data.employeeId, companyId } });
@@ -97,7 +97,7 @@ export class PayrollService {
     return formatStructure(updated);
   }
 
-  // ---- Salary Components -----------------------------------------------------
+  // ---- Salary Components ----
 
   async addComponent(companyId: string, structureId: string, data: CreateComponentInput) {
     const structure = await prisma.salaryStructure.findFirst({
@@ -144,7 +144,7 @@ export class PayrollService {
     return { message: "Salary component removed successfully" };
   }
 
-  // ---- Payslip generation ----------------------------------------------------
+  // ---- Payslip generation ----
 
   private async buildAttendanceSummary(employeeId: string, month: number, year: number): Promise<AttendanceSummary> {
     const from = new Date(Date.UTC(year, month - 1, 1));
@@ -275,7 +275,7 @@ export class PayrollService {
     };
   }
 
-  // ---- Payslip history -------------------------------------------------------
+  // ---- Payslip history ----
 
   async getMyPayslips(userId: string, params: MyPayslipsQuery) {
     const employee = await prisma.employee.findUnique({ where: { userId } });
@@ -342,12 +342,9 @@ export class PayrollService {
     };
   }
 
-  // ---- PDF -------------------------------------------------------------------
+  // ---- PDF ----
 
-  /**
-   * Fetches a payslip and renders it to a PDF buffer. Admins can access any
-   * payslip in their company; a non-admin may only access their own.
-   */
+  // Renders a payslip to a PDF buffer. Admins: any payslip in the company; others: own only.
   async getPayslipPdf(params: { companyId: string; userId: string; role: string; payslipId: string }) {
     const payslip = await prisma.payslip.findFirst({
       where: { id: params.payslipId, employee: { companyId: params.companyId } },

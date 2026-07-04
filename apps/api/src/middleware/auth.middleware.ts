@@ -28,7 +28,7 @@ export async function requireAuth(req: AuthenticatedRequest, res: Response, next
     try {
       const decoded = verifyAccessToken(token);
 
-      // Fetch dynamic user status from database to enforce instant block updates (e.g. deactivated account)
+      // Re-check live user status so blocks (e.g. deactivation) apply instantly.
       const user = await prisma.user.findUnique({
         where: { id: decoded.sub },
         select: {
