@@ -19,6 +19,7 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import api from "@/lib/api"
+import { useAuth } from "@/lib/auth-context"
 
 // ─── Types ───
 
@@ -32,6 +33,11 @@ interface AttendanceRecord {
   status: AttendanceStatus
   workingMinutes: number | null
   overtimeMinutes: number | null
+  employee?: {
+    id: string
+    name: string
+    department: string | null
+  }
 }
 
 interface AttendanceMeta {
@@ -84,6 +90,9 @@ function errorMessage(err: unknown, fallback: string) {
 // ─── Component ───
 
 export default function AttendancePage() {
+  const { user } = useAuth()
+  const isAdmin = user?.role === "ADMIN"
+
   const [mounted, setMounted] = React.useState(false)
   const [month, setMonth] = React.useState(1)
   const [year, setYear] = React.useState(2026)
@@ -107,10 +116,11 @@ export default function AttendancePage() {
     if (!mounted) return
     setLoading(true)
     setError(null)
+    const url = isAdmin ? "/attendance" : "/attendance/me"
     api
-      .get("/attendance/me", { params: { month, year, page: 1, limit: 31 } })
+      .get(url, { params: { month, year, page: 1, limit: 31 } })
       .then((res) => {
-        setRecords(res.data.records ?? [])
+        setRecords((isAdmin ? res.data.data : res.data.records) ?? [])
         setMeta(res.data.meta ?? null)
       })
       .catch((err) => {
@@ -119,7 +129,7 @@ export default function AttendancePage() {
         setError(errorMessage(err, "Failed to load attendance"))
       })
       .finally(() => setLoading(false))
-  }, [mounted, month, year])
+  }, [mounted, month, year, isAdmin])
 
   React.useEffect(() => {
     fetchRecords()
@@ -201,7 +211,7 @@ export default function AttendancePage() {
         <div className="flex flex-wrap items-center justify-between gap-4">
           <h1 className="text-lg font-medium text-foreground">Attendance</h1>
 
-          {isCurrentMonth && (
+          {!isAdmin && isCurrentMonth && (
             <div className="flex items-center gap-3">
               {punchError && (
                 <p className="flex items-center gap-1.5 text-xs text-destructive">
@@ -278,6 +288,7 @@ export default function AttendancePage() {
               <Table>
                 <TableHeader>
                   <TableRow>
+                    {isAdmin && <TableHead>Employee</TableHead>}
                     <TableHead>Date</TableHead>
                     <TableHead>Check In</TableHead>
                     <TableHead>Check Out</TableHead>
@@ -289,6 +300,9 @@ export default function AttendancePage() {
                 <TableBody>
                   {records.map((record) => (
                     <TableRow key={record.id}>
+                      {isAdmin && (
+                        <TableCell className="font-medium">{record.employee?.name ?? "—"}</TableCell>
+                      )}
                       <TableCell className="font-medium">{formatDate(record.date)}</TableCell>
                       <TableCell>{record.checkIn ?? "—"}</TableCell>
                       <TableCell>{record.checkOut ?? "—"}</TableCell>

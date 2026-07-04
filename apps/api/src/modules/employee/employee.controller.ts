@@ -87,6 +87,18 @@ export class EmployeeController {
     }
   };
 
+  getMyProfile = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+    try {
+      const companyId = req.user!.companyId;
+      const userId = req.user!.userId;
+
+      const employee = await this.employeeService.getMyProfile(companyId, userId);
+      res.json(employee);
+    } catch (error) {
+      next(error);
+    }
+  };
+
   getEmployeeById = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
     try {
       const companyId = req.user!.companyId;

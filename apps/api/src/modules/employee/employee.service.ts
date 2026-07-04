@@ -22,6 +22,48 @@ export interface CreateEmployeeInput {
   companyId: string;
 }
 
+const EMPLOYEE_DETAIL_INCLUDE = {
+  user: {
+    select: {
+      loginId: true,
+      email: true,
+      role: true,
+      isActive: true,
+      lastLoginAt: true,
+    },
+  },
+  manager: {
+    select: {
+      id: true,
+      firstName: true,
+      lastName: true,
+    },
+  },
+  skills: {
+    select: {
+      id: true,
+      name: true,
+    },
+  },
+  certifications: {
+    select: {
+      id: true,
+      name: true,
+      issuedBy: true,
+      issuedAt: true,
+      fileUrl: true,
+    },
+  },
+  documents: {
+    select: {
+      id: true,
+      title: true,
+      fileUrl: true,
+      uploadedAt: true,
+    },
+  },
+} satisfies Prisma.EmployeeInclude;
+
 export class EmployeeService {
   private identityService = new IdentityService();
 
@@ -196,47 +238,20 @@ export class EmployeeService {
   async getEmployeeById(companyId: string, id: string) {
     const employee = await prisma.employee.findFirst({
       where: { id, companyId },
-      include: {
-        user: {
-          select: {
-            loginId: true,
-            email: true,
-            role: true,
-            isActive: true,
-            lastLoginAt: true,
-          }
-        },
-        manager: {
-          select: {
-            id: true,
-            firstName: true,
-            lastName: true,
-          }
-        },
-        skills: {
-          select: {
-            id: true,
-            name: true,
-          }
-        },
-        certifications: {
-          select: {
-            id: true,
-            name: true,
-            issuedBy: true,
-            issuedAt: true,
-            fileUrl: true,
-          }
-        },
-        documents: {
-          select: {
-            id: true,
-            title: true,
-            fileUrl: true,
-            uploadedAt: true,
-          }
-        }
-      }
+      include: EMPLOYEE_DETAIL_INCLUDE,
+    });
+
+    if (!employee) {
+      throw new NotFoundError("Employee not found");
+    }
+
+    return employee;
+  }
+
+  async getMyProfile(companyId: string, userId: string) {
+    const employee = await prisma.employee.findFirst({
+      where: { userId, companyId },
+      include: EMPLOYEE_DETAIL_INCLUDE,
     });
 
     if (!employee) {

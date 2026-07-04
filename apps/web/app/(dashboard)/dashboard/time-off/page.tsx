@@ -2,9 +2,7 @@
 
 import * as React from "react"
 import {
-  Search,
   Plus,
-  X,
   Check,
   Ban,
   ChevronLeft,
@@ -12,19 +10,15 @@ import {
   Calendar,
   Clock,
   FileText,
-  Upload,
+  Loader2,
+  AlertTriangle,
 } from "lucide-react"
 
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card"
+import { Card, CardContent } from "@/components/ui/card"
 import {
   Table,
   TableBody,
@@ -42,87 +36,61 @@ import {
   SheetFooter,
   SheetClose,
 } from "@/components/ui/sheet"
+import { useAuth } from "@/lib/auth-context"
+import api from "@/lib/api"
 
 // ─── Types ───
 
-type LeaveType = "PAID" | "SICK" | "UNPAID"
+type LeaveType = "PAID" | "SICK" | "CASUAL"
 type LeaveStatus = "PENDING" | "APPROVED" | "REJECTED"
-
-interface Balance {
-  type: LeaveType
-  allocated: number | null
-  used: number
-  available: number | null
-}
-
-interface BalancesResponse {
-  year: number
-  balances: Balance[]
-}
 
 interface LeaveRequest {
   id: string
-  type: LeaveType
+  leaveType: LeaveType
   startDate: string
   endDate: string
   days: number
+  reason: string
   status: LeaveStatus
-  employee?: { id: string; name: string }
-  approver?: { id: string; name: string }
-  approverComment?: string
-  attachmentUrl?: string | null
+  approvedAt: string | null
+  decisionReason: string | null
   createdAt: string
-  decidedAt?: string
 }
 
-interface LeaveListResponse {
-  data: LeaveRequest[]
-  pagination: { page: number; limit: number; total: number }
+interface AdminLeaveRequest extends LeaveRequest {
+  employee: { id: string; name: string; department: string | null }
 }
 
 interface Allocation {
   id: string
-  employeeId: string
-  employeeName: string
-  type: LeaveType
+  leaveType: LeaveType
   year: number
-  allocatedDays: number
+  totalDays: number
+  usedDays: number
+  remainingDays: number
 }
 
-// ─── Mock Data ───
-
-const CURRENT_YEAR = 2026
-const CURRENT_USER = { id: "emp_01", name: "Alice Johnson" }
-
-const MOCK_BALANCES: BalancesResponse = {
-  year: CURRENT_YEAR,
-  balances: [
-    { type: "PAID", allocated: 24, used: 0, available: 24 },
-    { type: "SICK", allocated: 7, used: 0, available: 7 },
-    { type: "UNPAID", allocated: null, used: 3, available: null },
-  ],
+interface Meta {
+  total: number
+  page: number
+  limit: number
+  totalPages: number
 }
 
-let leaveIdCounter = 107
-function nextLeaveId() {
-  return `lv_${++leaveIdCounter}`
+interface EmployeeOption {
+  id: string
+  name: string
 }
 
-let allocationIdCounter = 20
-function nextAllocationId() {
-  return `al_${++allocationIdCounter}`
-}
+// ─── Constants / helpers ───
 
-function daysBetween(start: string, end: string) {
-  const s = new Date(start + "T00:00:00")
-  const e = new Date(end + "T00:00:00")
-  return Math.max(1, Math.round((e.getTime() - s.getTime()) / 86400000) + 1)
-}
+const LEAVE_TYPES: LeaveType[] = ["PAID", "SICK", "CASUAL"]
+const LIMIT = 8
 
 const TYPE_LABELS: Record<LeaveType, string> = {
   PAID: "Paid Leave",
   SICK: "Sick Leave",
-  UNPAID: "Unpaid Leave",
+  CASUAL: "Casual Leave",
 }
 
 const STATUS_CONFIG: Record<LeaveStatus, { label: string; klass: string }> = {
@@ -130,43 +98,6 @@ const STATUS_CONFIG: Record<LeaveStatus, { label: string; klass: string }> = {
   APPROVED: { label: "Approved", klass: "bg-green-500/10 text-green-600 hover:bg-green-500/15 dark:bg-green-500/15 dark:text-green-400" },
   REJECTED: { label: "Rejected", klass: "bg-destructive/10 text-destructive hover:bg-destructive/15" },
 }
-
-const MOCK_MY_LEAVES: LeaveRequest[] = [
-  { id: "lv_101", type: "PAID", startDate: "2026-05-13", endDate: "2026-05-14", days: 2, status: "APPROVED", approverComment: "Enjoy!", createdAt: "2026-05-01T09:30:00+05:30", decidedAt: "2026-05-02T10:00:00+05:30", approver: { id: "emp_00", name: "Jane Doe" } },
-  { id: "lv_102", type: "SICK", startDate: "2026-06-10", endDate: "2026-06-10", days: 1, status: "PENDING", createdAt: "2026-06-09T08:15:00+05:30" },
-  { id: "lv_103", type: "UNPAID", startDate: "2026-07-01", endDate: "2026-07-03", days: 3, status: "REJECTED", approverComment: "Critical release that week.", createdAt: "2026-06-20T14:00:00+05:30", decidedAt: "2026-06-21T09:00:00+05:30", approver: { id: "emp_00", name: "Jane Doe" } },
-  { id: "lv_104", type: "PAID", startDate: "2026-08-17", endDate: "2026-08-21", days: 5, status: "APPROVED", approverComment: "Have a great vacation!", createdAt: "2026-07-15T11:00:00+05:30", decidedAt: "2026-07-16T10:00:00+05:30", approver: { id: "emp_00", name: "Jane Doe" } },
-  { id: "lv_105", type: "SICK", startDate: "2026-09-05", endDate: "2026-09-05", days: 1, status: "PENDING", createdAt: "2026-09-04T07:45:00+05:30" },
-]
-
-const MOCK_ALL_LEAVES: LeaveRequest[] = [
-  { id: "lv_001", employee: { id: "emp_02", name: "John Doe" }, type: "PAID", startDate: "2026-10-28", endDate: "2026-10-28", days: 1, status: "PENDING", attachmentUrl: null, createdAt: "2026-10-27T09:00:00+05:30" },
-  { id: "lv_002", employee: { id: "emp_03", name: "Bob Smith" }, type: "SICK", startDate: "2026-10-15", endDate: "2026-10-16", days: 2, status: "PENDING", attachmentUrl: null, createdAt: "2026-10-14T10:30:00+05:30" },
-  { id: "lv_003", employee: { id: "emp_04", name: "Carol Williams" }, type: "PAID", startDate: "2026-11-01", endDate: "2026-11-05", days: 5, status: "APPROVED", approverComment: "Approved.", attachmentUrl: null, createdAt: "2026-10-20T08:00:00+05:30", decidedAt: "2026-10-21T09:00:00+05:30", approver: { id: "emp_00", name: "Jane Doe" } },
-  { id: "lv_004", employee: { id: "emp_05", name: "David Brown" }, type: "UNPAID", startDate: "2026-12-01", endDate: "2026-12-01", days: 1, status: "PENDING", attachmentUrl: null, createdAt: "2026-11-28T14:00:00+05:30" },
-  { id: "lv_005", employee: { id: "emp_06", name: "Emma Jones" }, type: "PAID", startDate: "2026-09-20", endDate: "2026-09-22", days: 3, status: "REJECTED", approverComment: "Team capacity insufficient.", attachmentUrl: null, createdAt: "2026-09-15T11:00:00+05:30", decidedAt: "2026-09-16T10:00:00+05:30", approver: { id: "emp_00", name: "Jane Doe" } },
-  { id: "lv_006", employee: { id: "emp_07", name: "Frank Miller" }, type: "SICK", startDate: "2026-08-03", endDate: "2026-08-05", days: 3, status: "APPROVED", approverComment: "Get well soon.", attachmentUrl: null, createdAt: "2026-08-02T07:00:00+05:30", decidedAt: "2026-08-02T09:00:00+05:30", approver: { id: "emp_00", name: "Jane Doe" } },
-  { id: "lv_007", employee: { id: "emp_08", name: "Grace Davis" }, type: "PAID", startDate: "2026-07-14", endDate: "2026-07-14", days: 1, status: "PENDING", attachmentUrl: "https://example.com/attachment.pdf", createdAt: "2026-07-10T13:00:00+05:30" },
-  { id: "lv_101", employee: { id: "emp_01", name: "Alice Johnson" }, type: "PAID", startDate: "2026-05-13", endDate: "2026-05-14", days: 2, status: "APPROVED", approverComment: "Enjoy!", attachmentUrl: null, createdAt: "2026-05-01T09:30:00+05:30", decidedAt: "2026-05-02T10:00:00+05:30", approver: { id: "emp_00", name: "Jane Doe" } },
-  { id: "lv_102", employee: { id: "emp_01", name: "Alice Johnson" }, type: "SICK", startDate: "2026-06-10", endDate: "2026-06-10", days: 1, status: "PENDING", attachmentUrl: null, createdAt: "2026-06-09T08:15:00+05:30" },
-  { id: "lv_103", employee: { id: "emp_01", name: "Alice Johnson" }, type: "UNPAID", startDate: "2026-07-01", endDate: "2026-07-03", days: 3, status: "REJECTED", approverComment: "Critical release that week.", attachmentUrl: null, createdAt: "2026-06-20T14:00:00+05:30", decidedAt: "2026-06-21T09:00:00+05:30", approver: { id: "emp_00", name: "Jane Doe" } },
-  { id: "lv_104", employee: { id: "emp_01", name: "Alice Johnson" }, type: "PAID", startDate: "2026-08-17", endDate: "2026-08-21", days: 5, status: "APPROVED", approverComment: "Have a great vacation!", attachmentUrl: null, createdAt: "2026-07-15T11:00:00+05:30", decidedAt: "2026-07-16T10:00:00+05:30", approver: { id: "emp_00", name: "Jane Doe" } },
-]
-
-const MOCK_ALLOCATIONS: Allocation[] = [
-  { id: "al_01", employeeId: "emp_01", employeeName: "Alice Johnson", type: "PAID", year: CURRENT_YEAR, allocatedDays: 24 },
-  { id: "al_02", employeeId: "emp_01", employeeName: "Alice Johnson", type: "SICK", year: CURRENT_YEAR, allocatedDays: 7 },
-  { id: "al_03", employeeId: "emp_02", employeeName: "John Doe", type: "PAID", year: CURRENT_YEAR, allocatedDays: 24 },
-  { id: "al_04", employeeId: "emp_02", employeeName: "John Doe", type: "SICK", year: CURRENT_YEAR, allocatedDays: 7 },
-  { id: "al_05", employeeId: "emp_03", employeeName: "Bob Smith", type: "PAID", year: CURRENT_YEAR, allocatedDays: 24 },
-  { id: "al_06", employeeId: "emp_03", employeeName: "Bob Smith", type: "SICK", year: CURRENT_YEAR, allocatedDays: 7 },
-  { id: "al_07", employeeId: "emp_04", employeeName: "Carol Williams", type: "PAID", year: CURRENT_YEAR, allocatedDays: 24 },
-  { id: "al_08", employeeId: "emp_04", employeeName: "Carol Williams", type: "SICK", year: CURRENT_YEAR, allocatedDays: 7 },
-  { id: "al_09", employeeId: "emp_05", employeeName: "David Brown", type: "PAID", year: CURRENT_YEAR, allocatedDays: 24 },
-  { id: "al_10", employeeId: "emp_05", employeeName: "David Brown", type: "SICK", year: CURRENT_YEAR, allocatedDays: 7 },
-]
-
-// ─── Helpers ───
 
 function formatDateTime(dateStr: string) {
   const d = new Date(dateStr)
@@ -178,46 +109,35 @@ function formatDate(dateStr: string) {
   return d.toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })
 }
 
-function getInitials(name: string) {
-  return name.split(" ").map((n) => n[0]).join("").toUpperCase().slice(0, 2)
+function errorMessage(err: unknown, fallback: string) {
+  return (
+    (err as { response?: { data?: { message?: string } } })?.response?.data?.message ??
+    (err instanceof Error ? err.message : fallback)
+  )
 }
-
-const LEAVE_TYPES: LeaveType[] = ["PAID", "SICK", "UNPAID"]
-const CURRENT_USER_LEAVES = MOCK_MY_LEAVES
-let allLeavesState = [...MOCK_ALL_LEAVES]
-let allocationsState = [...MOCK_ALLOCATIONS]
 
 // ─── Balance Card ───
 
-function BalanceCard({ balance }: { balance: Balance }) {
-  const progress =
-    balance.allocated != null && balance.allocated > 0
-      ? Math.round((balance.used / balance.allocated) * 100)
-      : 0
+function BalanceCard({ allocation }: { allocation: Allocation }) {
+  const progress = allocation.totalDays > 0 ? Math.round((allocation.usedDays / allocation.totalDays) * 100) : 0
 
   return (
     <Card size="sm" className="flex-1 min-w-0">
       <CardContent className="pt-[--card-spacing]">
-        <p className="text-xs text-muted-foreground mb-1">{TYPE_LABELS[balance.type]}</p>
-        <p className="text-2xl font-semibold text-foreground tabular-nums">
-          {balance.available != null ? balance.available : "—"}
-        </p>
+        <p className="text-xs text-muted-foreground mb-1">{TYPE_LABELS[allocation.leaveType]}</p>
+        <p className="text-2xl font-semibold text-foreground tabular-nums">{allocation.remainingDays}</p>
         <p className="text-xs text-muted-foreground mt-1">
-          {balance.allocated != null
-            ? `${balance.used} used of ${balance.allocated}`
-            : `${balance.used} used`}
+          {allocation.usedDays} used of {allocation.totalDays}
         </p>
-        {balance.allocated != null && balance.allocated > 0 && (
-          <div className="mt-2 h-1.5 w-full rounded-full bg-muted">
-            <div
-              className={cn(
-                "h-full rounded-full transition-all",
-                progress >= 80 ? "bg-destructive" : progress >= 50 ? "bg-yellow-500" : "bg-green-500"
-              )}
-              style={{ width: `${Math.min(progress, 100)}%` }}
-            />
-          </div>
-        )}
+        <div className="mt-2 h-1.5 w-full rounded-full bg-muted">
+          <div
+            className={cn(
+              "h-full rounded-full transition-all",
+              progress >= 80 ? "bg-destructive" : progress >= 50 ? "bg-yellow-500" : "bg-green-500"
+            )}
+            style={{ width: `${Math.min(progress, 100)}%` }}
+          />
+        </div>
       </CardContent>
     </Card>
   )
@@ -242,23 +162,39 @@ function CreateLeaveSheet({
 }: {
   open: boolean
   onOpenChange: (open: boolean) => void
-  onCreate: (data: { type: LeaveType; startDate: string; endDate: string; remarks: string }) => void
+  onCreate: (data: { leaveType: LeaveType; startDate: string; endDate: string; reason: string }) => Promise<void>
 }) {
-  const [type, setType] = React.useState<LeaveType>("PAID")
+  const [leaveType, setLeaveType] = React.useState<LeaveType>("PAID")
   const [startDate, setStartDate] = React.useState("")
   const [endDate, setEndDate] = React.useState("")
-  const [remarks, setRemarks] = React.useState("")
+  const [reason, setReason] = React.useState("")
+  const [error, setError] = React.useState<string | null>(null)
+  const [submitting, setSubmitting] = React.useState(false)
 
-  function handleSubmit(e: React.FormEvent) {
+  React.useEffect(() => {
+    if (open) {
+      setLeaveType("PAID")
+      setStartDate("")
+      setEndDate("")
+      setReason("")
+      setError(null)
+    }
+  }, [open])
+
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
-    onCreate({ type, startDate, endDate, remarks })
-    setType("PAID")
-    setStartDate("")
-    setEndDate("")
-    setRemarks("")
+    setSubmitting(true)
+    setError(null)
+    try {
+      await onCreate({ leaveType, startDate, endDate, reason })
+    } catch (err) {
+      setError(errorMessage(err, "Failed to submit leave request"))
+    } finally {
+      setSubmitting(false)
+    }
   }
 
-  const canSubmit = startDate && endDate && new Date(endDate) >= new Date(startDate)
+  const canSubmit = startDate && endDate && reason.trim() && new Date(endDate) >= new Date(startDate)
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
@@ -272,8 +208,8 @@ function CreateLeaveSheet({
             <fieldset>
               <label className="mb-1.5 block text-xs font-medium text-foreground">Leave Type</label>
               <select
-                value={type}
-                onChange={(e) => setType(e.target.value as LeaveType)}
+                value={leaveType}
+                onChange={(e) => setLeaveType(e.target.value as LeaveType)}
                 className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-ring"
               >
                 {LEAVE_TYPES.map((t) => (
@@ -293,30 +229,33 @@ function CreateLeaveSheet({
             </fieldset>
 
             <fieldset>
-              <label className="mb-1.5 block text-xs font-medium text-foreground">Remarks</label>
+              <label className="mb-1.5 block text-xs font-medium text-foreground">Reason</label>
               <textarea
-                value={remarks}
-                onChange={(e) => setRemarks(e.target.value)}
+                value={reason}
+                onChange={(e) => setReason(e.target.value)}
                 rows={3}
+                required
                 className="flex w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-ring placeholder:text-muted-foreground resize-none"
-                placeholder="Optional reason..."
+                placeholder="Reason for leave..."
               />
             </fieldset>
 
-            <fieldset>
-              <label className="mb-1.5 block text-xs font-medium text-foreground">Attachment (optional)</label>
-              <div className="flex items-center gap-2 rounded-md border border-dashed border-input px-3 py-4 text-sm text-muted-foreground">
-                <Upload className="size-4" />
-                <span>Drop a file or click to upload</span>
-              </div>
-            </fieldset>
+            {error && (
+              <p className="flex items-center gap-1.5 text-xs text-destructive">
+                <AlertTriangle className="size-3.5 shrink-0" />
+                {error}
+              </p>
+            )}
           </div>
 
           <SheetFooter>
             <SheetClose asChild>
               <Button type="button" variant="outline">Cancel</Button>
             </SheetClose>
-            <Button type="submit" disabled={!canSubmit}>Submit Request</Button>
+            <Button type="submit" disabled={!canSubmit || submitting}>
+              {submitting && <Loader2 className="mr-1.5 size-3.5 animate-spin" />}
+              Submit Request
+            </Button>
           </SheetFooter>
         </form>
       </SheetContent>
@@ -332,61 +271,88 @@ function DecisionSheet({
   onOpenChange,
   onDecide,
 }: {
-  request: LeaveRequest | null
+  request: AdminLeaveRequest | null
   open: boolean
   onOpenChange: (open: boolean) => void
-  onDecide: (id: string, action: "approve" | "reject", comment: string) => void
+  onDecide: (id: string, action: "approve" | "reject", reason: string) => Promise<void>
 }) {
-  const [comment, setComment] = React.useState("")
+  const [reason, setReason] = React.useState("")
+  const [error, setError] = React.useState<string | null>(null)
+  const [busy, setBusy] = React.useState<"approve" | "reject" | null>(null)
 
   React.useEffect(() => {
-    if (open) setComment("")
+    if (open) {
+      setReason("")
+      setError(null)
+      setBusy(null)
+    }
   }, [open])
 
   if (!request) return null
+
+  async function handleDecide(action: "approve" | "reject") {
+    setBusy(action)
+    setError(null)
+    try {
+      await onDecide(request!.id, action, reason)
+      onOpenChange(false)
+    } catch (err) {
+      setError(errorMessage(err, "Failed to update leave request"))
+    } finally {
+      setBusy(null)
+    }
+  }
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent side="right" className="w-full sm:max-w-md">
         <SheetHeader>
-          <SheetTitle>{request.employee?.name || CURRENT_USER.name} &middot; {TYPE_LABELS[request.type]}</SheetTitle>
+          <SheetTitle>{request.employee.name} &middot; {TYPE_LABELS[request.leaveType]}</SheetTitle>
           <SheetDescription>
             {formatDate(request.startDate)} — {formatDate(request.endDate)} ({request.days} day{request.days > 1 ? "s" : ""})
           </SheetDescription>
         </SheetHeader>
 
         <div className="flex flex-1 flex-col gap-4 p-4">
+          <div className="rounded-md bg-muted p-3">
+            <p className="text-xs text-muted-foreground mb-0.5">Reason</p>
+            <p className="text-sm text-foreground">{request.reason}</p>
+          </div>
+
           <fieldset>
-            <label className="mb-1.5 block text-xs font-medium text-foreground">Comment</label>
+            <label className="mb-1.5 block text-xs font-medium text-foreground">Rejection Reason (optional)</label>
             <textarea
-              value={comment}
-              onChange={(e) => setComment(e.target.value)}
+              value={reason}
+              onChange={(e) => setReason(e.target.value)}
               rows={4}
               className="flex w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-ring placeholder:text-muted-foreground resize-none"
-              placeholder="Optional comment..."
+              placeholder="Only used if you reject..."
             />
           </fieldset>
+
+          {error && (
+            <p className="flex items-center gap-1.5 text-xs text-destructive">
+              <AlertTriangle className="size-3.5 shrink-0" />
+              {error}
+            </p>
+          )}
 
           <SheetFooter className="flex-row gap-2">
             <Button
               variant="outline"
               className="flex-1 gap-1.5"
-              onClick={() => {
-                onDecide(request.id, "reject", comment)
-                onOpenChange(false)
-              }}
+              disabled={busy !== null}
+              onClick={() => handleDecide("reject")}
             >
-              <Ban className="size-4" />
+              {busy === "reject" ? <Loader2 className="size-4 animate-spin" /> : <Ban className="size-4" />}
               Reject
             </Button>
             <Button
               className="flex-1 gap-1.5"
-              onClick={() => {
-                onDecide(request.id, "approve", comment)
-                onOpenChange(false)
-              }}
+              disabled={busy !== null}
+              onClick={() => handleDecide("approve")}
             >
-              <Check className="size-4" />
+              {busy === "approve" ? <Loader2 className="size-4 animate-spin" /> : <Check className="size-4" />}
               Approve
             </Button>
           </SheetFooter>
@@ -400,46 +366,54 @@ function DecisionSheet({
 
 function AllocationSheet({
   allocation,
+  defaultEmployeeId,
+  employees,
   open,
   onOpenChange,
   onSave,
 }: {
   allocation?: Allocation | null
+  defaultEmployeeId: string | null
+  employees: EmployeeOption[]
   open: boolean
   onOpenChange: (open: boolean) => void
-  onSave: (data: { employeeId: string; type: LeaveType; year: number; allocatedDays: number }) => void
+  onSave: (data: { employeeId: string; leaveType: LeaveType; year: number; totalDays: number }) => Promise<void>
 }) {
   const isEdit = !!allocation
-  const [employeeId, setEmployeeId] = React.useState("emp_01")
-  const [type, setType] = React.useState<LeaveType>("PAID")
-  const [year, setYear] = React.useState(CURRENT_YEAR)
-  const [allocatedDays, setAllocatedDays] = React.useState(24)
+  const [employeeId, setEmployeeId] = React.useState(defaultEmployeeId ?? "")
+  const [leaveType, setLeaveType] = React.useState<LeaveType>("PAID")
+  const [year, setYear] = React.useState(new Date().getFullYear())
+  const [totalDays, setTotalDays] = React.useState(24)
+  const [error, setError] = React.useState<string | null>(null)
+  const [submitting, setSubmitting] = React.useState(false)
 
   React.useEffect(() => {
+    if (!open) return
+    setError(null)
     if (allocation) {
-      setEmployeeId(allocation.employeeId)
-      setType(allocation.type)
+      setLeaveType(allocation.leaveType)
       setYear(allocation.year)
-      setAllocatedDays(allocation.allocatedDays)
+      setTotalDays(allocation.totalDays)
     } else {
-      setEmployeeId("emp_01")
-      setType("PAID")
-      setYear(CURRENT_YEAR)
-      setAllocatedDays(24)
+      setEmployeeId(defaultEmployeeId ?? "")
+      setLeaveType("PAID")
+      setYear(new Date().getFullYear())
+      setTotalDays(24)
     }
-  }, [allocation, open])
+  }, [allocation, open, defaultEmployeeId])
 
-  function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
-    onSave({ employeeId, type, year, allocatedDays })
-  }
-
-  const employeeSet = [...new Set(allocationsState.map((a) => a.employeeId))].map(
-    (id) => {
-      const found = allocationsState.find((a) => a.employeeId === id)
-      return { id, name: found?.employeeName ?? id }
+    setSubmitting(true)
+    setError(null)
+    try {
+      await onSave({ employeeId, leaveType, year, totalDays })
+    } catch (err) {
+      setError(errorMessage(err, "Failed to save allocation"))
+    } finally {
+      setSubmitting(false)
     }
-  )
+  }
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
@@ -458,7 +432,7 @@ function AllocationSheet({
                 className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-ring"
                 disabled={isEdit}
               >
-                {employeeSet.map((emp) => (
+                {employees.map((emp) => (
                   <option key={emp.id} value={emp.id}>{emp.name}</option>
                 ))}
               </select>
@@ -467,8 +441,8 @@ function AllocationSheet({
             <fieldset>
               <label className="mb-1.5 block text-xs font-medium text-foreground">Leave Type</label>
               <select
-                value={type}
-                onChange={(e) => setType(e.target.value as LeaveType)}
+                value={leaveType}
+                onChange={(e) => setLeaveType(e.target.value as LeaveType)}
                 className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-ring"
                 disabled={isEdit}
               >
@@ -490,22 +464,32 @@ function AllocationSheet({
             </fieldset>
 
             <fieldset>
-              <label className="mb-1.5 block text-xs font-medium text-foreground">Allocated Days</label>
+              <label className="mb-1.5 block text-xs font-medium text-foreground">Total Days</label>
               <Input
                 type="number"
-                min={0}
-                value={allocatedDays}
-                onChange={(e) => setAllocatedDays(Number(e.target.value))}
+                min={1}
+                value={totalDays}
+                onChange={(e) => setTotalDays(Number(e.target.value))}
                 required
               />
             </fieldset>
+
+            {error && (
+              <p className="flex items-center gap-1.5 text-xs text-destructive">
+                <AlertTriangle className="size-3.5 shrink-0" />
+                {error}
+              </p>
+            )}
           </div>
 
           <SheetFooter>
             <SheetClose asChild>
               <Button type="button" variant="outline">Cancel</Button>
             </SheetClose>
-            <Button type="submit">{isEdit ? "Update" : "Create"}</Button>
+            <Button type="submit" disabled={!employeeId || submitting}>
+              {submitting && <Loader2 className="mr-1.5 size-3.5 animate-spin" />}
+              {isEdit ? "Update" : "Create"}
+            </Button>
           </SheetFooter>
         </form>
       </SheetContent>
@@ -516,23 +500,42 @@ function AllocationSheet({
 // ─── Component ───
 
 export default function TimeOffPage() {
+  const { user } = useAuth()
+  const isAdmin = user?.role === "ADMIN"
+
   const [activeTab, setActiveTab] = React.useState<Tab>("my-requests")
+  const [allocations, setAllocations] = React.useState<Allocation[]>([])
+
+  const fetchMyAllocations = React.useCallback(() => {
+    api
+      .get("/leaves/allocations/me")
+      .then((res) => setAllocations(res.data ?? []))
+      .catch(() => setAllocations([]))
+  }, [])
+
+  React.useEffect(() => {
+    fetchMyAllocations()
+  }, [fetchMyAllocations])
+
+  const currentYear = new Date().getFullYear()
+  const currentAllocations = allocations.filter((a) => a.year === currentYear)
+  const tabs = isAdmin ? TABS : TABS.filter((t) => t.key === "my-requests")
 
   return (
     <div className="min-h-screen bg-background p-6">
       <div className="mx-auto max-w-6xl space-y-6">
         <h1 className="text-lg font-medium text-foreground">Time Off</h1>
 
-        {/* Balance Overview */}
-        <div className="flex flex-wrap gap-4">
-          {MOCK_BALANCES.balances.map((b) => (
-            <BalanceCard key={b.type} balance={b} />
-          ))}
-        </div>
+        {currentAllocations.length > 0 && (
+          <div className="flex flex-wrap gap-4">
+            {currentAllocations.map((a) => (
+              <BalanceCard key={a.id} allocation={a} />
+            ))}
+          </div>
+        )}
 
-        {/* Tab Bar */}
         <div className="flex gap-1 border-b">
-          {TABS.map((tab) => (
+          {tabs.map((tab) => (
             <button
               key={tab.key}
               onClick={() => setActiveTab(tab.key)}
@@ -548,10 +551,9 @@ export default function TimeOffPage() {
           ))}
         </div>
 
-        {/* Tab Content */}
-        {activeTab === "my-requests" && <MyRequestsTab />}
-        {activeTab === "all-requests" && <AllRequestsTab />}
-        {activeTab === "allocations" && <AllocationsTab />}
+        {activeTab === "my-requests" && <MyRequestsTab onLeaveCreated={fetchMyAllocations} />}
+        {activeTab === "all-requests" && isAdmin && <AllRequestsTab onDecision={fetchMyAllocations} />}
+        {activeTab === "allocations" && isAdmin && <AllocationsTab />}
       </div>
     </div>
   )
@@ -559,160 +561,165 @@ export default function TimeOffPage() {
 
 // ─── My Requests Tab ───
 
-function MyRequestsTab() {
-  const [leaves, setLeaves] = React.useState<LeaveRequest[]>(CURRENT_USER_LEAVES)
-  const [year, setYear] = React.useState(CURRENT_YEAR)
+function MyRequestsTab({ onLeaveCreated }: { onLeaveCreated: () => void }) {
+  const [leaves, setLeaves] = React.useState<LeaveRequest[]>([])
+  const [meta, setMeta] = React.useState<Meta | null>(null)
   const [statusFilter, setStatusFilter] = React.useState<LeaveStatus | "ALL">("ALL")
+  const [page, setPage] = React.useState(1)
+  const [loading, setLoading] = React.useState(true)
+  const [error, setError] = React.useState<string | null>(null)
   const [createOpen, setCreateOpen] = React.useState(false)
   const [detailRequest, setDetailRequest] = React.useState<LeaveRequest | null>(null)
 
-  const filtered = React.useMemo(() => {
-    return leaves.filter((l) => {
-      const lYear = new Date(l.startDate + "T00:00:00").getFullYear()
-      return lYear === year && (statusFilter === "ALL" || l.status === statusFilter)
-    })
-  }, [leaves, year, statusFilter])
+  const fetchLeaves = React.useCallback(() => {
+    setLoading(true)
+    setError(null)
+    api
+      .get("/leaves/me", {
+        params: { page, limit: LIMIT, status: statusFilter !== "ALL" ? statusFilter : undefined },
+      })
+      .then((res) => {
+        setLeaves(res.data.records ?? [])
+        setMeta(res.data.meta ?? null)
+      })
+      .catch((err) => {
+        setLeaves([])
+        setMeta(null)
+        setError(errorMessage(err, "Failed to load leave requests"))
+      })
+      .finally(() => setLoading(false))
+  }, [page, statusFilter])
 
-  function handleCreate(data: { type: LeaveType; startDate: string; endDate: string; remarks: string }) {
-    const newLeave: LeaveRequest = {
-      id: nextLeaveId(),
-      type: data.type,
-      startDate: data.startDate,
-      endDate: data.endDate,
-      days: daysBetween(data.startDate, data.endDate),
-      status: "PENDING",
-      attachmentUrl: null,
-      createdAt: new Date().toISOString(),
-    }
-    setLeaves((prev) => [newLeave, ...prev])
-    allLeavesState = [newLeave, ...allLeavesState]
+  React.useEffect(() => {
+    fetchLeaves()
+  }, [fetchLeaves])
+
+  async function handleCreate(data: { leaveType: LeaveType; startDate: string; endDate: string; reason: string }) {
+    await api.post("/leaves", data)
     setCreateOpen(false)
-  }
-
-  function handleCancel(id: string) {
-    setLeaves((prev) => prev.map((l) => (l.id === id ? { ...l, status: "REJECTED" as LeaveStatus } : l)))
-    allLeavesState = allLeavesState.map((l) => (l.id === id ? { ...l, status: "REJECTED" as LeaveStatus } : l))
+    setPage(1)
+    fetchLeaves()
+    onLeaveCreated()
   }
 
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-4">
-        <div className="flex flex-wrap items-center gap-3">
-          <select
-            value={year}
-            onChange={(e) => setYear(Number(e.target.value))}
-            className="flex h-9 rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-ring"
-          >
-            {[2026, 2025, 2024].map((y) => (
-              <option key={y} value={y}>{y}</option>
-            ))}
-          </select>
-          <select
-            value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value as LeaveStatus | "ALL")}
-            className="flex h-9 rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-ring"
-          >
-            <option value="ALL">All Status</option>
-            <option value="PENDING">Pending</option>
-            <option value="APPROVED">Approved</option>
-            <option value="REJECTED">Rejected</option>
-          </select>
-        </div>
+        <select
+          value={statusFilter}
+          onChange={(e) => {
+            setStatusFilter(e.target.value as LeaveStatus | "ALL")
+            setPage(1)
+          }}
+          className="flex h-9 rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-ring"
+        >
+          <option value="ALL">All Status</option>
+          <option value="PENDING">Pending</option>
+          <option value="APPROVED">Approved</option>
+          <option value="REJECTED">Rejected</option>
+        </select>
         <Button onClick={() => setCreateOpen(true)}>
           <Plus className="mr-1.5 size-4" />
           Create Leave
         </Button>
       </div>
 
-      <div className="rounded-md border">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Type</TableHead>
-              <TableHead>Dates</TableHead>
-              <TableHead>Days</TableHead>
-              <TableHead>Status</TableHead>
-              <TableHead>Approver</TableHead>
-              <TableHead>Created</TableHead>
-              <TableHead className="w-20">Actions</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {filtered.map((leave) => {
-              const statusCfg = STATUS_CONFIG[leave.status]
-              const detail = allLeavesState.find((l) => l.id === leave.id)
-              return (
-                <TableRow key={leave.id}>
-                  <TableCell>
-                    <span className="text-sm font-medium text-foreground">{TYPE_LABELS[leave.type]}</span>
-                  </TableCell>
-                  <TableCell className="text-sm tabular-nums">
-                    <span className="text-muted-foreground">{formatDate(leave.startDate)}</span>
-                    <span className="mx-1 text-muted-foreground/50">—</span>
-                    <span className="text-muted-foreground">{formatDate(leave.endDate)}</span>
-                  </TableCell>
-                  <TableCell className="tabular-nums">{leave.days}</TableCell>
-                  <TableCell>
-                    <Badge variant="secondary" className={cn("font-normal", statusCfg.klass)}>
-                      {statusCfg.label}
-                    </Badge>
-                  </TableCell>
-                  <TableCell className="text-sm text-muted-foreground">
-                    {detail?.approver?.name || "—"}
-                  </TableCell>
-                  <TableCell className="text-sm text-muted-foreground tabular-nums">
-                    {formatDateTime(leave.createdAt)}
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex items-center gap-1">
-                      <Button
-                        variant="ghost"
-                        size="icon-xs"
-                        onClick={() => setDetailRequest(leave)}
-                        title="View details"
-                      >
-                        <FileText className="size-3.5" />
-                      </Button>
-                      {leave.status === "PENDING" && (
+      {loading ? (
+        <div className="flex items-center justify-center py-12">
+          <Loader2 className="size-5 animate-spin text-muted-foreground" />
+        </div>
+      ) : error ? (
+        <p className="flex items-center justify-center gap-1.5 py-12 text-center text-sm text-destructive">
+          <AlertTriangle className="size-4 shrink-0" />
+          {error}
+        </p>
+      ) : (
+        <>
+          <div className="rounded-md border">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Type</TableHead>
+                  <TableHead>Dates</TableHead>
+                  <TableHead>Days</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>Created</TableHead>
+                  <TableHead className="w-16">Details</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {leaves.map((leave) => {
+                  const statusCfg = STATUS_CONFIG[leave.status]
+                  return (
+                    <TableRow key={leave.id}>
+                      <TableCell>
+                        <span className="text-sm font-medium text-foreground">{TYPE_LABELS[leave.leaveType]}</span>
+                      </TableCell>
+                      <TableCell className="text-sm tabular-nums">
+                        <span className="text-muted-foreground">{formatDate(leave.startDate)}</span>
+                        <span className="mx-1 text-muted-foreground/50">—</span>
+                        <span className="text-muted-foreground">{formatDate(leave.endDate)}</span>
+                      </TableCell>
+                      <TableCell className="tabular-nums">{leave.days}</TableCell>
+                      <TableCell>
+                        <Badge variant="secondary" className={cn("font-normal", statusCfg.klass)}>
+                          {statusCfg.label}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-sm text-muted-foreground tabular-nums">
+                        {formatDateTime(leave.createdAt)}
+                      </TableCell>
+                      <TableCell>
                         <Button
                           variant="ghost"
                           size="icon-xs"
-                          onClick={() => handleCancel(leave.id)}
-                          title="Cancel request"
+                          onClick={() => setDetailRequest(leave)}
+                          title="View details"
                         >
-                          <X className="size-3.5 text-destructive" />
+                          <FileText className="size-3.5" />
                         </Button>
-                      )}
-                    </div>
-                  </TableCell>
-                </TableRow>
-              )
-            })}
-            {filtered.length === 0 && (
-              <TableRow>
-                <TableCell colSpan={7} className="py-12 text-center text-sm text-muted-foreground">
-                  No leave requests found.
-                </TableCell>
-              </TableRow>
-            )}
-          </TableBody>
-        </Table>
-      </div>
+                      </TableCell>
+                    </TableRow>
+                  )
+                })}
+                {leaves.length === 0 && (
+                  <TableRow>
+                    <TableCell colSpan={6} className="py-12 text-center text-sm text-muted-foreground">
+                      No leave requests found.
+                    </TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
+          </div>
+
+          {meta && meta.totalPages > 1 && (
+            <div className="flex items-center justify-center gap-4">
+              <Button variant="outline" size="sm" disabled={page <= 1} onClick={() => setPage((p) => Math.max(1, p - 1))}>
+                <ChevronLeft className="size-4" />
+                Previous
+              </Button>
+              <span className="text-xs text-muted-foreground tabular-nums">
+                Page {meta.page} of {meta.totalPages}
+              </span>
+              <Button variant="outline" size="sm" disabled={page >= meta.totalPages} onClick={() => setPage((p) => p + 1)}>
+                Next
+                <ChevronRight className="size-4" />
+              </Button>
+            </div>
+          )}
+        </>
+      )}
 
       <CreateLeaveSheet open={createOpen} onOpenChange={setCreateOpen} onCreate={handleCreate} />
 
-      {/* Detail Sheet */}
-      <Sheet
-        open={!!detailRequest}
-        onOpenChange={(open) => { if (!open) setDetailRequest(null) }}
-      >
+      <Sheet open={!!detailRequest} onOpenChange={(open) => { if (!open) setDetailRequest(null) }}>
         <SheetContent side="right" className="w-full sm:max-w-md">
           {detailRequest && (
             <>
               <SheetHeader>
-                <SheetTitle>{TYPE_LABELS[detailRequest.type]}</SheetTitle>
+                <SheetTitle>{TYPE_LABELS[detailRequest.leaveType]}</SheetTitle>
                 <SheetDescription>
-                  {detailRequest.id} &middot;{" "}
                   <Badge variant="secondary" className={cn("font-normal", STATUS_CONFIG[detailRequest.status].klass)}>
                     {STATUS_CONFIG[detailRequest.status].label}
                   </Badge>
@@ -735,6 +742,10 @@ function MyRequestsTab() {
                     <p className="text-sm text-foreground">{detailRequest.days} day{detailRequest.days > 1 ? "s" : ""}</p>
                   </div>
                 </div>
+                <div className="rounded-md bg-muted p-3">
+                  <p className="text-xs text-muted-foreground mb-0.5">Reason</p>
+                  <p className="text-sm text-foreground">{detailRequest.reason}</p>
+                </div>
                 <div className="flex items-start gap-2.5">
                   <FileText className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
                   <div>
@@ -742,18 +753,18 @@ function MyRequestsTab() {
                     <p className="text-sm text-foreground">{formatDateTime(detailRequest.createdAt)}</p>
                   </div>
                 </div>
-                {detailRequest.approverComment && (
+                {detailRequest.decisionReason && (
                   <div className="rounded-md bg-muted p-3">
-                    <p className="text-xs text-muted-foreground mb-0.5">Approver Comment</p>
-                    <p className="text-sm text-foreground">{detailRequest.approverComment}</p>
+                    <p className="text-xs text-muted-foreground mb-0.5">Decision Reason</p>
+                    <p className="text-sm text-foreground">{detailRequest.decisionReason}</p>
                   </div>
                 )}
-                {detailRequest.decidedAt && (
+                {detailRequest.approvedAt && (
                   <div className="flex items-start gap-2.5">
                     <Calendar className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
                     <div>
                       <p className="text-xs text-muted-foreground">Decided At</p>
-                      <p className="text-sm text-foreground">{formatDateTime(detailRequest.decidedAt)}</p>
+                      <p className="text-sm text-foreground">{formatDateTime(detailRequest.approvedAt)}</p>
                     </div>
                   </div>
                 )}
@@ -768,79 +779,80 @@ function MyRequestsTab() {
 
 // ─── All Requests Tab (Admin) ───
 
-const LIMIT = 8
-
-function AllRequestsTab() {
-  const [leaves, setLeaves] = React.useState<LeaveRequest[]>(allLeavesState)
-  const [search, setSearch] = React.useState("")
+function AllRequestsTab({ onDecision }: { onDecision: () => void }) {
+  const [leaves, setLeaves] = React.useState<AdminLeaveRequest[]>([])
+  const [meta, setMeta] = React.useState<Meta | null>(null)
+  const [employees, setEmployees] = React.useState<EmployeeOption[]>([])
+  const [employeeFilter, setEmployeeFilter] = React.useState("ALL")
   const [statusFilter, setStatusFilter] = React.useState<LeaveStatus | "ALL">("ALL")
+  const [leaveTypeFilter, setLeaveTypeFilter] = React.useState<LeaveType | "ALL">("ALL")
   const [page, setPage] = React.useState(1)
-  const [decisionTarget, setDecisionTarget] = React.useState<LeaveRequest | null>(null)
+  const [loading, setLoading] = React.useState(true)
+  const [error, setError] = React.useState<string | null>(null)
+  const [decisionTarget, setDecisionTarget] = React.useState<AdminLeaveRequest | null>(null)
 
-  const filtered = React.useMemo(() => {
-    let result = leaves
-    if (search.trim()) {
-      const q = search.toLowerCase()
-      result = result.filter((l) => l.employee?.name.toLowerCase().includes(q))
+  React.useEffect(() => {
+    api
+      .get("/employees", { params: { limit: 100 } })
+      .then((res) => setEmployees(res.data.data ?? []))
+      .catch(() => setEmployees([]))
+  }, [])
+
+  const fetchLeaves = React.useCallback(() => {
+    setLoading(true)
+    setError(null)
+    api
+      .get("/leaves", {
+        params: {
+          page,
+          limit: LIMIT,
+          status: statusFilter !== "ALL" ? statusFilter : undefined,
+          employee: employeeFilter !== "ALL" ? employeeFilter : undefined,
+          leaveType: leaveTypeFilter !== "ALL" ? leaveTypeFilter : undefined,
+        },
+      })
+      .then((res) => {
+        setLeaves(res.data.data ?? [])
+        setMeta(res.data.meta ?? null)
+      })
+      .catch((err) => {
+        setLeaves([])
+        setMeta(null)
+        setError(errorMessage(err, "Failed to load leave requests"))
+      })
+      .finally(() => setLoading(false))
+  }, [page, statusFilter, employeeFilter, leaveTypeFilter])
+
+  React.useEffect(() => {
+    fetchLeaves()
+  }, [fetchLeaves])
+
+  async function handleDecide(id: string, action: "approve" | "reject", reason: string) {
+    if (action === "approve") {
+      await api.patch(`/leaves/${id}/approve`)
+    } else {
+      await api.patch(`/leaves/${id}/reject`, reason ? { reason } : {})
     }
-    if (statusFilter !== "ALL") {
-      result = result.filter((l) => l.status === statusFilter)
-    }
-    return result
-  }, [leaves, search, statusFilter])
-
-  const totalPages = Math.ceil(filtered.length / LIMIT)
-  const paginated = filtered.slice((page - 1) * LIMIT, page * LIMIT)
-
-  function handleDecide(id: string, action: "approve" | "reject", comment: string) {
-    setLeaves((prev) =>
-      prev.map((l) =>
-        l.id === id
-          ? {
-              ...l,
-              status: action === "approve" ? "APPROVED" : "REJECTED",
-              approverComment: comment || undefined,
-              approver: { id: CURRENT_USER.id, name: CURRENT_USER.name },
-              decidedAt: new Date().toISOString(),
-            }
-          : l
-      )
-    )
-    allLeavesState = allLeavesState.map((l) =>
-      l.id === id
-        ? {
-            ...l,
-            status: action === "approve" ? "APPROVED" : "REJECTED",
-            approverComment: comment || undefined,
-            approver: { id: CURRENT_USER.id, name: CURRENT_USER.name },
-            decidedAt: new Date().toISOString(),
-          }
-        : l
-    )
-    setDecisionTarget(null)
+    fetchLeaves()
+    onDecision()
   }
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-4">
-        <div className="relative w-full max-w-xs">
-          <Search className="absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            placeholder="Search employees..."
-            className="pl-8"
-            value={search}
-            onChange={(e) => {
-              setSearch(e.target.value)
-              setPage(1)
-            }}
-          />
-        </div>
+      <div className="flex flex-wrap items-center gap-3">
+        <select
+          value={employeeFilter}
+          onChange={(e) => { setEmployeeFilter(e.target.value); setPage(1) }}
+          className="flex h-9 rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-ring"
+        >
+          <option value="ALL">All Employees</option>
+          {employees.map((emp) => (
+            <option key={emp.id} value={emp.id}>{emp.name}</option>
+          ))}
+        </select>
         <select
           value={statusFilter}
-          onChange={(e) => {
-            setStatusFilter(e.target.value as LeaveStatus | "ALL")
-            setPage(1)
-          }}
+          onChange={(e) => { setStatusFilter(e.target.value as LeaveStatus | "ALL"); setPage(1) }}
           className="flex h-9 rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-ring"
         >
           <option value="ALL">All Status</option>
@@ -848,116 +860,105 @@ function AllRequestsTab() {
           <option value="APPROVED">Approved</option>
           <option value="REJECTED">Rejected</option>
         </select>
+        <select
+          value={leaveTypeFilter}
+          onChange={(e) => { setLeaveTypeFilter(e.target.value as LeaveType | "ALL"); setPage(1) }}
+          className="flex h-9 rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-ring"
+        >
+          <option value="ALL">All Types</option>
+          {LEAVE_TYPES.map((t) => (
+            <option key={t} value={t}>{TYPE_LABELS[t]}</option>
+          ))}
+        </select>
       </div>
 
-      <div className="rounded-md border">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Employee</TableHead>
-              <TableHead>Type</TableHead>
-              <TableHead>Dates</TableHead>
-              <TableHead>Days</TableHead>
-              <TableHead>Status</TableHead>
-              <TableHead>Attachment</TableHead>
-              <TableHead className="w-28">Actions</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {paginated.map((leave) => {
-              const statusCfg = STATUS_CONFIG[leave.status]
-              return (
-                <TableRow key={leave.id}>
-                  <TableCell>
-                    <span className="text-sm font-medium text-foreground">{leave.employee?.name}</span>
-                  </TableCell>
-                  <TableCell className="text-sm text-muted-foreground">{TYPE_LABELS[leave.type]}</TableCell>
-                  <TableCell className="text-sm tabular-nums text-muted-foreground">
-                    {formatDate(leave.startDate)}
-                    <span className="mx-1 text-muted-foreground/50">—</span>
-                    {formatDate(leave.endDate)}
-                  </TableCell>
-                  <TableCell className="tabular-nums">{leave.days}</TableCell>
-                  <TableCell>
-                    <Badge variant="secondary" className={cn("font-normal", statusCfg.klass)}>
-                      {statusCfg.label}
-                    </Badge>
-                  </TableCell>
-                  <TableCell>
-                    {leave.attachmentUrl ? (
-                      <a href={leave.attachmentUrl} target="_blank" rel="noopener noreferrer" className="text-xs text-blue-500 hover:underline">
-                        View
-                      </a>
-                    ) : (
-                      <span className="text-xs text-muted-foreground">—</span>
-                    )}
-                  </TableCell>
-                  <TableCell>
-                    {leave.status === "PENDING" ? (
-                      <div className="flex items-center gap-1">
-                        <Button
-                          variant="ghost"
-                          size="icon-xs"
-                          onClick={() => setDecisionTarget(leave)}
-                          className="text-green-600 hover:text-green-700"
-                          title="Approve"
-                        >
-                          <Check className="size-3.5" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon-xs"
-                          onClick={() => {
-                            setDecisionTarget(leave)
-                          }}
-                          className="text-destructive hover:text-destructive"
-                          title="Reject"
-                        >
-                          <Ban className="size-3.5" />
-                        </Button>
-                      </div>
-                    ) : (
-                      <span className="text-xs text-muted-foreground">—</span>
-                    )}
-                  </TableCell>
-                </TableRow>
-              )
-            })}
-            {paginated.length === 0 && (
-              <TableRow>
-                <TableCell colSpan={7} className="py-12 text-center text-sm text-muted-foreground">
-                  No leave requests found.
-                </TableCell>
-              </TableRow>
-            )}
-          </TableBody>
-        </Table>
-      </div>
-
-      {totalPages > 1 && (
-        <div className="flex items-center justify-center gap-4">
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={page <= 1}
-            onClick={() => setPage((p) => Math.max(1, p - 1))}
-          >
-            <ChevronLeft className="size-4" />
-            Previous
-          </Button>
-          <span className="text-xs text-muted-foreground tabular-nums">
-            Page {page} of {totalPages}
-          </span>
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={page >= totalPages}
-            onClick={() => setPage((p) => p + 1)}
-          >
-            Next
-            <ChevronRight className="size-4" />
-          </Button>
+      {loading ? (
+        <div className="flex items-center justify-center py-12">
+          <Loader2 className="size-5 animate-spin text-muted-foreground" />
         </div>
+      ) : error ? (
+        <p className="flex items-center justify-center gap-1.5 py-12 text-center text-sm text-destructive">
+          <AlertTriangle className="size-4 shrink-0" />
+          {error}
+        </p>
+      ) : (
+        <>
+          <div className="rounded-md border">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Employee</TableHead>
+                  <TableHead>Type</TableHead>
+                  <TableHead>Dates</TableHead>
+                  <TableHead>Days</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead className="w-24">Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {leaves.map((leave) => {
+                  const statusCfg = STATUS_CONFIG[leave.status]
+                  return (
+                    <TableRow key={leave.id}>
+                      <TableCell>
+                        <span className="text-sm font-medium text-foreground">{leave.employee.name}</span>
+                      </TableCell>
+                      <TableCell className="text-sm text-muted-foreground">{TYPE_LABELS[leave.leaveType]}</TableCell>
+                      <TableCell className="text-sm tabular-nums text-muted-foreground">
+                        {formatDate(leave.startDate)}
+                        <span className="mx-1 text-muted-foreground/50">—</span>
+                        {formatDate(leave.endDate)}
+                      </TableCell>
+                      <TableCell className="tabular-nums">{leave.days}</TableCell>
+                      <TableCell>
+                        <Badge variant="secondary" className={cn("font-normal", statusCfg.klass)}>
+                          {statusCfg.label}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>
+                        {leave.status === "PENDING" ? (
+                          <Button
+                            variant="ghost"
+                            size="icon-xs"
+                            onClick={() => setDecisionTarget(leave)}
+                            title="Review request"
+                          >
+                            <FileText className="size-3.5" />
+                          </Button>
+                        ) : (
+                          <span className="text-xs text-muted-foreground">—</span>
+                        )}
+                      </TableCell>
+                    </TableRow>
+                  )
+                })}
+                {leaves.length === 0 && (
+                  <TableRow>
+                    <TableCell colSpan={6} className="py-12 text-center text-sm text-muted-foreground">
+                      No leave requests found.
+                    </TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
+          </div>
+
+          {meta && meta.totalPages > 1 && (
+            <div className="flex items-center justify-center gap-4">
+              <Button variant="outline" size="sm" disabled={page <= 1} onClick={() => setPage((p) => Math.max(1, p - 1))}>
+                <ChevronLeft className="size-4" />
+                Previous
+              </Button>
+              <span className="text-xs text-muted-foreground tabular-nums">
+                Page {meta.page} of {meta.totalPages}
+              </span>
+              <Button variant="outline" size="sm" disabled={page >= meta.totalPages} onClick={() => setPage((p) => p + 1)}>
+                Next
+                <ChevronRight className="size-4" />
+              </Button>
+            </div>
+          )}
+        </>
       )}
 
       <DecisionSheet
@@ -973,72 +974,65 @@ function AllRequestsTab() {
 // ─── Allocations Tab (Admin) ───
 
 function AllocationsTab() {
-  const [allocations, setAllocations] = React.useState<Allocation[]>(allocationsState)
-  const [employeeFilter, setEmployeeFilter] = React.useState("ALL")
-  const [yearFilter, setYearFilter] = React.useState(CURRENT_YEAR)
+  const [employees, setEmployees] = React.useState<EmployeeOption[]>([])
+  const [employeeId, setEmployeeId] = React.useState<string | null>(null)
+  const [allocations, setAllocations] = React.useState<Allocation[]>([])
+  const [yearFilter, setYearFilter] = React.useState(new Date().getFullYear())
+  const [loading, setLoading] = React.useState(false)
+  const [error, setError] = React.useState<string | null>(null)
   const [editTarget, setEditTarget] = React.useState<Allocation | null>(null)
   const [createOpen, setCreateOpen] = React.useState(false)
 
-  const employeeOptions = React.useMemo(() => {
-    const map = new Map<string, string>()
-    allocations.forEach((a) => map.set(a.employeeId, a.employeeName))
-    return Array.from(map.entries()).map(([id, name]) => ({ id, name }))
-  }, [allocations])
+  React.useEffect(() => {
+    api
+      .get("/employees", { params: { limit: 100 } })
+      .then((res) => {
+        const list: EmployeeOption[] = res.data.data ?? []
+        setEmployees(list)
+        setEmployeeId((prev) => prev ?? list[0]?.id ?? null)
+      })
+      .catch(() => setEmployees([]))
+  }, [])
 
-  const filtered = React.useMemo(() => {
-    return allocations.filter((a) => {
-      if (employeeFilter !== "ALL" && a.employeeId !== employeeFilter) return false
-      if (a.year !== yearFilter) return false
-      return true
-    })
-  }, [allocations, employeeFilter, yearFilter])
+  const fetchAllocations = React.useCallback(() => {
+    if (!employeeId) return
+    setLoading(true)
+    setError(null)
+    api
+      .get(`/leaves/allocations/${employeeId}`)
+      .then((res) => setAllocations(res.data ?? []))
+      .catch((err) => {
+        setAllocations([])
+        setError(errorMessage(err, "Failed to load allocations"))
+      })
+      .finally(() => setLoading(false))
+  }, [employeeId])
 
-  function handleCreate(data: { employeeId: string; type: LeaveType; year: number; allocatedDays: number }) {
-    const exists = allocationsState.find(
-      (a) => a.employeeId === data.employeeId && a.type === data.type && a.year === data.year
-    )
-    if (exists) {
-      alert("Allocation already exists for this employee, type, and year. Use edit to modify.")
-      return
-    }
-    const employeeName = employeeOptions.find((e) => e.id === data.employeeId)?.name ?? data.employeeId
-    const newAllocation: Allocation = {
-      id: nextAllocationId(),
-      employeeId: data.employeeId,
-      employeeName,
-      type: data.type,
-      year: data.year,
-      allocatedDays: data.allocatedDays,
-    }
-    setAllocations((prev) => [...prev, newAllocation])
-    allocationsState = [...allocationsState, newAllocation]
+  React.useEffect(() => {
+    fetchAllocations()
+  }, [fetchAllocations])
+
+  async function handleSave(data: { employeeId: string; leaveType: LeaveType; year: number; totalDays: number }) {
+    await api.post("/leaves/allocations", data)
     setCreateOpen(false)
+    setEditTarget(null)
+    fetchAllocations()
   }
 
-  function handleEdit(data: { employeeId: string; type: LeaveType; year: number; allocatedDays: number }) {
-    if (!editTarget) return
-    setAllocations((prev) =>
-      prev.map((a) =>
-        a.id === editTarget.id ? { ...a, allocatedDays: data.allocatedDays } : a
-      )
-    )
-    allocationsState = allocationsState.map((a) =>
-      a.id === editTarget.id ? { ...a, allocatedDays: data.allocatedDays } : a
-    )
-    setEditTarget(null)
-  }
+  const filtered = allocations.filter((a) => a.year === yearFilter)
+  const years = Array.from(new Set(allocations.map((a) => a.year))).sort((a, b) => b - a)
+  if (!years.includes(yearFilter)) years.unshift(yearFilter)
 
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div className="flex flex-wrap items-center gap-3">
           <select
-            value={employeeFilter}
-            onChange={(e) => setEmployeeFilter(e.target.value)}
+            value={employeeId ?? ""}
+            onChange={(e) => setEmployeeId(e.target.value)}
             className="flex h-9 rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-ring"
           >
-            <option value="ALL">All Employees</option>
-            {employeeOptions.map((emp) => (
+            {employees.map((emp) => (
               <option key={emp.id} value={emp.id}>{emp.name}</option>
             ))}
           </select>
@@ -1047,65 +1041,86 @@ function AllocationsTab() {
             onChange={(e) => setYearFilter(Number(e.target.value))}
             className="flex h-9 rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-ring"
           >
-            {[2026, 2025, 2024].map((y) => (
+            {years.map((y) => (
               <option key={y} value={y}>{y}</option>
             ))}
           </select>
         </div>
-        <Button onClick={() => setCreateOpen(true)}>
+        <Button onClick={() => setCreateOpen(true)} disabled={!employeeId}>
           <Plus className="mr-1.5 size-4" />
           New Allocation
         </Button>
       </div>
 
-      <div className="rounded-md border">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Employee</TableHead>
-              <TableHead>Leave Type</TableHead>
-              <TableHead>Year</TableHead>
-              <TableHead>Allocated Days</TableHead>
-              <TableHead className="w-16">Edit</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {filtered.map((allocation) => (
-              <TableRow key={allocation.id}>
-                <TableCell className="font-medium text-foreground">{allocation.employeeName}</TableCell>
-                <TableCell className="text-muted-foreground">{TYPE_LABELS[allocation.type]}</TableCell>
-                <TableCell className="tabular-nums">{allocation.year}</TableCell>
-                <TableCell className="tabular-nums">{allocation.allocatedDays}</TableCell>
-                <TableCell>
-                  <Button
-                    variant="ghost"
-                    size="icon-xs"
-                    onClick={() => setEditTarget(allocation)}
-                    title="Edit allocation"
-                  >
-                    <FileText className="size-3.5" />
-                  </Button>
-                </TableCell>
-              </TableRow>
-            ))}
-            {filtered.length === 0 && (
+      {loading ? (
+        <div className="flex items-center justify-center py-12">
+          <Loader2 className="size-5 animate-spin text-muted-foreground" />
+        </div>
+      ) : error ? (
+        <p className="flex items-center justify-center gap-1.5 py-12 text-center text-sm text-destructive">
+          <AlertTriangle className="size-4 shrink-0" />
+          {error}
+        </p>
+      ) : (
+        <div className="rounded-md border">
+          <Table>
+            <TableHeader>
               <TableRow>
-                <TableCell colSpan={5} className="py-12 text-center text-sm text-muted-foreground">
-                  No allocations found.
-                </TableCell>
+                <TableHead>Leave Type</TableHead>
+                <TableHead>Year</TableHead>
+                <TableHead>Total Days</TableHead>
+                <TableHead>Used Days</TableHead>
+                <TableHead>Remaining</TableHead>
+                <TableHead className="w-16">Edit</TableHead>
               </TableRow>
-            )}
-          </TableBody>
-        </Table>
-      </div>
+            </TableHeader>
+            <TableBody>
+              {filtered.map((allocation) => (
+                <TableRow key={allocation.id}>
+                  <TableCell className="font-medium text-foreground">{TYPE_LABELS[allocation.leaveType]}</TableCell>
+                  <TableCell className="tabular-nums">{allocation.year}</TableCell>
+                  <TableCell className="tabular-nums">{allocation.totalDays}</TableCell>
+                  <TableCell className="tabular-nums">{allocation.usedDays}</TableCell>
+                  <TableCell className="tabular-nums">{allocation.remainingDays}</TableCell>
+                  <TableCell>
+                    <Button
+                      variant="ghost"
+                      size="icon-xs"
+                      onClick={() => setEditTarget(allocation)}
+                      title="Edit allocation"
+                    >
+                      <FileText className="size-3.5" />
+                    </Button>
+                  </TableCell>
+                </TableRow>
+              ))}
+              {filtered.length === 0 && (
+                <TableRow>
+                  <TableCell colSpan={6} className="py-12 text-center text-sm text-muted-foreground">
+                    No allocations found.
+                  </TableCell>
+                </TableRow>
+              )}
+            </TableBody>
+          </Table>
+        </div>
+      )}
 
-      <AllocationSheet open={createOpen} onOpenChange={setCreateOpen} onSave={handleCreate} />
+      <AllocationSheet
+        open={createOpen}
+        defaultEmployeeId={employeeId}
+        employees={employees}
+        onOpenChange={setCreateOpen}
+        onSave={handleSave}
+      />
 
       <AllocationSheet
         allocation={editTarget}
         open={!!editTarget}
+        defaultEmployeeId={employeeId}
+        employees={employees}
         onOpenChange={(open) => { if (!open) setEditTarget(null) }}
-        onSave={handleEdit}
+        onSave={(data) => handleSave({ ...data, employeeId: employeeId! })}
       />
     </div>
   )

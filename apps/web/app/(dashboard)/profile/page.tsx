@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { Mail, Phone, MapPin, User, Briefcase, FileText, Award } from "lucide-react"
+import { Mail, Phone, MapPin, User, Briefcase, FileText, Loader2, AlertTriangle } from "lucide-react"
 
 import { Badge } from "@/components/ui/badge"
 import {
@@ -16,8 +16,8 @@ import {
 } from "@/components/ui/tabs"
 import { ResumeTab } from "@/components/profile/resume"
 import { PrivateInfoTab } from "@/components/profile/private-info"
-import { SalaryInfoTab } from "@/components/profile/salary-info"
 import { DocumentsTab } from "@/components/profile/documents"
+import api from "@/lib/api"
 
 interface Skill {
   id: string
@@ -29,139 +29,119 @@ interface Certification {
   name: string
   issuedBy: string
   issuedAt: string
+  fileUrl: string | null
 }
 
-interface Resume {
-  about: string
-  whatILoveAboutJob: string
-  interestsHobbies: string
-  skills: Skill[]
-  certifications: Certification[]
-}
-
-interface BankInfo {
-  accountNumber: string
-  bankName: string
-  ifscCode: string
-  panNumber: string
-  uanNumber: string
-  esicCode: string
-}
-
-interface PrivateInfo {
-  dateOfBirth: string
-  mailingAddress: string
-  nationality: string
-  personalEmail: string
-  gender: string
-  maritalStatus: string
-  dateOfJoining: string
-  bank: BankInfo
+interface Document {
+  id: string
+  title: string
+  fileUrl: string
+  uploadedAt: string
 }
 
 interface Manager {
   id: string
-  name: string
+  firstName: string
+  lastName: string
 }
 
 interface EmployeeProfile {
   id: string
-  loginId: string
   firstName: string
   lastName: string
-  email: string
-  phone: string
-  avatarUrl: string
-  company: string
-  department: string
-  manager: Manager
-  location: string
-  resume: Resume
-  privateInfo: PrivateInfo
-  editableFields: string[]
-}
-
-const MOCK_PROFILE: EmployeeProfile = {
-  id: "emp_02",
-  loginId: "OIJODO20220001",
-  firstName: "John",
-  lastName: "Doe",
-  email: "john@odoo.in",
-  phone: "+91 9876543211",
-  avatarUrl: "",
-  company: "Odoo India",
-  department: "Engineering",
-  manager: { id: "emp_01", name: "Jane Doe" },
-  location: "Kolkata",
-  resume: {
-    about: "Full-stack developer with 4 years experience building scalable web applications using React, Node.js, and PostgreSQL.",
-    whatILoveAboutJob: "Solving real problems for real people through clean, maintainable code.",
-    interestsHobbies: "Chess, trekking, photography",
-    skills: [
-      { id: "skl_01", name: "React" },
-      { id: "skl_02", name: "Node.js" },
-    ],
-    certifications: [
-      { id: "crt_01", name: "AWS Solutions Architect", issuedBy: "Amazon", issuedAt: "2025-03-01" },
-    ],
-  },
-  privateInfo: {
-    dateOfBirth: "1998-04-12",
-    mailingAddress: "22 Park Street, Kolkata 700016",
-    nationality: "Indian",
-    personalEmail: "john.personal@gmail.com",
-    gender: "MALE",
-    maritalStatus: "SINGLE",
-    dateOfJoining: "2022-01-10",
-    bank: {
-      accountNumber: "XXXX1234",
-      bankName: "SBI",
-      ifscCode: "SBIN0000123",
-      panNumber: "ABCDE1234F",
-      uanNumber: "100200300400",
-      esicCode: "1234567890",
-    },
-  },
-  editableFields: ["phone", "mailingAddress", "personalEmail", "avatar", "about", "whatILoveAboutJob", "interestsHobbies"],
-}
-
-const MOCK_DOCUMENTS = [
-  { id: "doc_01", title: "Offer letter", fileUrl: "#", uploadedAt: "2022-01-10T10:00:00+05:30" },
-  { id: "doc_02", title: "ID proof", fileUrl: "#", uploadedAt: "2022-01-11T14:30:00+05:30" },
-]
-
-const MOCK_SALARY = {
-  ctc: 2400000,
-  monthlyGross: 200000,
-  basic: 80000,
-  hra: 40000,
-  allowances: [
-    { label: "Special Allowance", amount: 50000 },
-    { label: "Travel Allowance", amount: 10000 },
-    { label: "Medical Allowance", amount: 12500 },
-  ],
-  deductions: [
-    { label: "PF", amount: 12000 },
-    { label: "Professional Tax", amount: 200 },
-  ],
-  netPay: 158300,
-  effectiveFrom: "2025-04-01",
+  avatarUrl: string | null
+  phone: string | null
+  designation: string | null
+  department: string | null
+  location: string | null
+  managerId: string | null
+  dateOfJoining: string
+  about: string | null
+  whatILoveAboutJob: string | null
+  interestsHobbies: string | null
+  dateOfBirth: string | null
+  mailingAddress: string | null
+  nationality: string | null
+  personalEmail: string | null
+  gender: string | null
+  maritalStatus: string | null
+  bankAccountNumber: string | null
+  bankName: string | null
+  ifscCode: string | null
+  panNumber: string | null
+  uanNumber: string | null
+  esicCode: string | null
+  user: {
+    loginId: string
+    email: string
+    role: string
+  }
+  manager: Manager | null
+  skills: Skill[]
+  certifications: Certification[]
+  documents: Document[]
 }
 
 function getInitials(firstName: string, lastName: string) {
-  return (firstName[0] + lastName[0]).toUpperCase()
+  return ((firstName[0] ?? "") + (lastName[0] ?? "")).toUpperCase() || "?"
+}
+
+function errorMessage(err: unknown, fallback: string) {
+  return (
+    (err as { response?: { data?: { message?: string } } })?.response?.data?.message ??
+    (err instanceof Error ? err.message : fallback)
+  )
 }
 
 export default function ProfilePage() {
-  const [profile] = React.useState(MOCK_PROFILE)
-  const isAdmin = true
+  const [profile, setProfile] = React.useState<EmployeeProfile | null>(null)
+  const [loading, setLoading] = React.useState(true)
+  const [error, setError] = React.useState<string | null>(null)
 
-  const tabList = ["Resume"]
-  if (isAdmin) tabList.push("Private Info", "Salary Info")
-  else tabList.push("Private Info")
-  tabList.push("Documents")
+  const fetchProfile = React.useCallback(() => {
+    setLoading(true)
+    setError(null)
+    api
+      .get("/employees/me")
+      .then((res) => setProfile(res.data))
+      .catch((err) => setError(errorMessage(err, "Failed to load profile")))
+      .finally(() => setLoading(false))
+  }, [])
 
+  React.useEffect(() => {
+    fetchProfile()
+  }, [fetchProfile])
+
+  const handleFieldSave = React.useCallback(
+    async (field: "phone" | "location" | "department" | "designation", value: string) => {
+      if (!profile) return
+      const res = await api.patch(`/employees/${profile.id}`, { [field]: value })
+      setProfile((prev) => (prev ? { ...prev, [field]: res.data[field] } : prev))
+    },
+    [profile],
+  )
+
+  const tabList = ["Resume", "Private Info", "Documents"]
   const [activeTab, setActiveTab] = React.useState(tabList[0])
+
+  if (loading) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-background">
+        <Loader2 className="size-5 animate-spin text-muted-foreground" />
+      </div>
+    )
+  }
+
+  if (error || !profile) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-background">
+        <p className="flex items-center gap-1.5 text-sm text-destructive">
+          <AlertTriangle className="size-4 shrink-0" />
+          {error ?? "Profile not found"}
+        </p>
+      </div>
+    )
+  }
 
   return (
     <div className="min-h-screen bg-background p-6">
@@ -177,28 +157,35 @@ export default function ProfilePage() {
               <h1 className="text-xl font-medium text-foreground">
                 {profile.firstName} {profile.lastName}
               </h1>
-              <p className="text-sm text-muted-foreground">{profile.department} &middot; {profile.company}</p>
+              <p className="text-sm text-muted-foreground">
+                {profile.department ?? "—"} &middot; {profile.designation ?? "—"}
+              </p>
               <div className="mt-3 flex flex-wrap gap-x-6 gap-y-2">
                 <div className="flex items-center gap-2 text-sm text-muted-foreground">
                   <Mail className="size-3.5" />
-                  {profile.email}
+                  {profile.user.email}
                 </div>
                 <div className="flex items-center gap-2 text-sm text-muted-foreground">
                   <Phone className="size-3.5" />
-                  {profile.phone}
+                  {profile.phone ?? "—"}
                 </div>
                 <div className="flex items-center gap-2 text-sm text-muted-foreground">
                   <MapPin className="size-3.5" />
-                  {profile.location}
+                  {profile.location ?? "—"}
                 </div>
               </div>
-              <div className="mt-2 flex items-center gap-2 text-sm text-muted-foreground">
-                <User className="size-3.5" />
-                Reports to <span className="font-medium text-foreground">{profile.manager.name}</span>
-              </div>
+              {profile.manager && (
+                <div className="mt-2 flex items-center gap-2 text-sm text-muted-foreground">
+                  <User className="size-3.5" />
+                  Reports to{" "}
+                  <span className="font-medium text-foreground">
+                    {profile.manager.firstName} {profile.manager.lastName}
+                  </span>
+                </div>
+              )}
             </div>
             <Badge variant="default" className="shrink-0">
-              {isAdmin ? "Admin" : "Employee"}
+              {profile.user.role.charAt(0) + profile.user.role.slice(1).toLowerCase()}
             </Badge>
           </div>
         </div>
@@ -209,7 +196,6 @@ export default function ProfilePage() {
               <TabsTrigger key={tab} value={tab} className="flex-1">
                 {tab === "Resume" && <FileText className="mr-1.5 size-3.5" />}
                 {tab === "Private Info" && <User className="mr-1.5 size-3.5" />}
-                {tab === "Salary Info" && <Award className="mr-1.5 size-3.5" />}
                 {tab === "Documents" && <Briefcase className="mr-1.5 size-3.5" />}
                 {tab}
               </TabsTrigger>
@@ -217,21 +203,21 @@ export default function ProfilePage() {
           </TabsList>
 
           <TabsContent value="Resume">
-            <ResumeTab resume={profile.resume} editableFields={profile.editableFields} />
+            <ResumeTab
+              about={profile.about}
+              whatILoveAboutJob={profile.whatILoveAboutJob}
+              interestsHobbies={profile.interestsHobbies}
+              skills={profile.skills}
+              certifications={profile.certifications}
+            />
           </TabsContent>
 
           <TabsContent value="Private Info">
-            <PrivateInfoTab privateInfo={profile.privateInfo} editableFields={profile.editableFields} />
+            <PrivateInfoTab profile={profile} onSave={handleFieldSave} />
           </TabsContent>
 
-          {isAdmin && (
-            <TabsContent value="Salary Info">
-              <SalaryInfoTab salary={MOCK_SALARY} />
-            </TabsContent>
-          )}
-
           <TabsContent value="Documents">
-            <DocumentsTab documents={MOCK_DOCUMENTS} />
+            <DocumentsTab documents={profile.documents} />
           </TabsContent>
         </Tabs>
       </div>

@@ -1,11 +1,12 @@
 import { Router } from "express";
 import { EmployeeController } from "./employee.controller";
-import { requireAuth, requireRole } from "../../middleware/auth.middleware";
+import { requireAuth, requireRole, type AuthenticatedRequest } from "../../middleware/auth.middleware";
 import multer, { type FileFilterCallback } from "multer";
 import crypto from "crypto";
 import path from "path";
-import { BadRequestError } from "../../utils/errors";
-import type { Request } from "express";
+import { BadRequestError, ForbiddenError } from "../../utils/errors";
+import { prisma } from "../../db/prisma";
+import type { Request, Response, NextFunction } from "express";
 
 export const employeeRouter = Router();
 const employeeController = new EmployeeController();
@@ -34,12 +35,36 @@ const upload = multer({
 });
 
 employeeRouter.use(requireAuth);
-employeeRouter.use(requireRole(["ADMIN"])); // Admin only routes for now
+
+// Self-service: any authenticated employee viewing/editing their own record.
+// Must stay above "/:id" so it isn't swallowed as an id param.
+employeeRouter.get("/me", employeeController.getMyProfile);
+
+async function requireAdminOrSelf(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+  try {
+    if (req.user!.role === "ADMIN") return next();
+
+    const employee = await prisma.employee.findFirst({
+      where: { id: req.params.id as string, companyId: req.user!.companyId },
+      select: { userId: true },
+    });
+
+    if (employee && employee.userId === req.user!.userId) return next();
+
+    return next(new ForbiddenError("You do not have permission to perform this action"));
+  } catch (error) {
+    next(error);
+  }
+}
+
+employeeRouter.patch("/:id", requireAdminOrSelf, employeeController.updateEmployee);
+
+// Admin only routes
+employeeRouter.use(requireRole(["ADMIN"]));
 
 employeeRouter.post("/", employeeController.createEmployee);
 employeeRouter.get("/", employeeController.getEmployees);
 employeeRouter.get("/:id", employeeController.getEmployeeById);
-employeeRouter.patch("/:id", employeeController.updateEmployee);
 employeeRouter.delete("/:id", employeeController.deactivateEmployee);
 
 // Skills
