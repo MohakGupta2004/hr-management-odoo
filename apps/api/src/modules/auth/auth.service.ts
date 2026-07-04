@@ -26,116 +26,132 @@ export class AuthService {
       .trim();
     
     const words = cleanName.split(/\s+/).filter(Boolean);
-    let prefix = "";
+    let basePrefix = "";
     if (words.length >= 2 && words[0] && words[1]) {
-      prefix = (words[0].charAt(0) + words[1].charAt(0)).toUpperCase();
+      basePrefix = (words[0].charAt(0) + words[1].charAt(0)).toUpperCase();
     } else if (words.length === 1 && words[0]) {
-      prefix = words[0].substring(0, 2).toUpperCase();
+      basePrefix = words[0].substring(0, 2).toUpperCase();
     } else {
-      prefix = "CO";
+      basePrefix = "CO";
+    }
+    basePrefix = basePrefix.replace(/[^A-Z0-9]/g, "");
+    if (basePrefix.length < 2) {
+      basePrefix = "CO";
     }
 
-    prefix = prefix.replace(/[^A-Z0-9]/g, "");
-    if (prefix.length < 2) {
-      prefix = "CO";
+    // Pre-validate the globally-unique fields we can't auto-resolve (company name,
+    // employee phone) so the client gets a clean 409 instead of a 500.
+    const [nameTaken, phoneTaken] = await Promise.all([
+      prisma.company.findUnique({ where: { name: data.companyName } }),
+      data.phone ? prisma.employee.findFirst({ where: { phone: data.phone } }) : Promise.resolve(null),
+    ]);
+    if (nameTaken) {
+      throw new ConflictError("Company name already exists");
+    }
+    if (phoneTaken) {
+      throw new ConflictError("Phone number already in use");
     }
 
-    try {
-      const saltRounds = 10;
-      const passwordHash = await bcrypt.hash(data.password, saltRounds);
+    const passwordHash = await bcrypt.hash(data.password, 10);
+    const nameParts = data.fullName.trim().split(/\s+/);
+    const firstName = nameParts[0] || "Admin";
+    const lastName = nameParts.slice(1).join(" ") || "User";
+    const year = new Date().getFullYear();
 
-      const result = await prisma.$transaction(async (tx) => {
-        // Create company directly without check-then-insert. The DB enforces unique name and prefix.
-        const company = await tx.company.create({
-          data: {
-            name: data.companyName,
-            prefix,
-            logoUrl: data.logo,
-          },
+    // The prefix is globally unique but derived from the name, so it collides
+    // across companies. Pick a free prefix and retry on a concurrent race.
+    const MAX_ATTEMPTS = 5;
+    let result: { company: any; user: any; employee: any } | undefined;
+    for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
+      const prefix = await this.resolveUniquePrefix(basePrefix);
+      try {
+        result = await prisma.$transaction(async (tx) => {
+          const company = await tx.company.create({
+            data: { name: data.companyName, prefix, logoUrl: data.logo },
+          });
+
+          const serial = await this.identityService.getNextJoiningSerial(tx, company.id, year);
+          const loginId = this.identityService.generateLoginId(prefix, firstName, lastName, year, serial);
+
+          const user = await tx.user.create({
+            data: {
+              loginId,
+              email: data.email,
+              passwordHash,
+              role: "ADMIN",
+              companyId: company.id,
+              mustChangePassword: false,
+            },
+          });
+
+          const employee = await tx.employee.create({
+            data: {
+              userId: user.id,
+              companyId: company.id,
+              firstName,
+              lastName,
+              phone: data.phone,
+              dateOfJoining: new Date(),
+              joiningYear: year,
+              joiningSerial: serial,
+              employmentStatus: "ACTIVE",
+            },
+          });
+
+          return { company, user, employee };
         });
-
-        const nameParts = data.fullName.trim().split(/\s+/);
-        const firstName = nameParts[0] || "Admin";
-        const lastName = nameParts.slice(1).join(" ") || "User";
-        const year = new Date().getFullYear();
-
-        const serial = await this.identityService.getNextJoiningSerial(tx, company.id, year);
-        const loginId = this.identityService.generateLoginId(prefix, firstName, lastName, year, serial);
-
-        // Create user. Unique check handled by DB constraints.
-        const user = await tx.user.create({
-          data: {
-            loginId,
-            email: data.email,
-            passwordHash,
-            role: "ADMIN",
-            companyId: company.id,
-            mustChangePassword: false,
-          },
-        });
-
-        // Create employee profile. Unique check handled by DB constraints (phone is unique).
-        const employee = await tx.employee.create({
-          data: {
-            userId: user.id,
-            companyId: company.id,
-            firstName,
-            lastName,
-            phone: data.phone,
-            dateOfJoining: new Date(),
-            joiningYear: year,
-            joiningSerial: serial,
-            employmentStatus: "ACTIVE",
-          },
-        });
-
-        return { company, user, employee };
-      });
-
-      const token = crypto.randomBytes(32).toString("hex");
-      await redisConnection.set(`verification_token:${token}`, result.user.id, "EX", 86400);
-
-      return {
-        company: {
-          id: result.company.id,
-          name: result.company.name,
-          prefix: result.company.prefix,
-          logoUrl: result.company.logoUrl,
-        },
-        user: {
-          id: result.user.id,
-          loginId: result.user.loginId,
-          email: result.user.email,
-          role: result.user.role,
-        },
-        employee: {
-          id: result.employee.id,
-          firstName: result.employee.firstName,
-          lastName: result.employee.lastName,
-        },
-        token,
-      };
-    } catch (error: any) {
-      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
-        const target = (error.meta?.target as string[]) || [];
-        if (target.includes("email") || target.includes("companyId_email")) {
-          throw new ConflictError("Email already exists");
+        break;
+      } catch (error: any) {
+        const isUnique = error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002";
+        if (isUnique && attempt < MAX_ATTEMPTS - 1) {
+          continue; // prefix/loginId raced another registration — re-resolve and retry
         }
-        if (target.includes("prefix")) {
-          throw new ConflictError("Company prefix already exists");
+        if (isUnique) {
+          throw new ConflictError("Could not allocate a unique company prefix, please try again");
         }
-        if (target.includes("name")) {
-          throw new ConflictError("Company name already exists");
-        }
-        if (target.includes("phone")) {
-          throw new ConflictError("Phone number already in use");
-        }
-        if (target.includes("loginId")) {
-          throw new ConflictError("Login ID already exists");
-        }
+        throw error;
       }
-      throw error;
     }
+
+    if (!result) {
+      throw new ConflictError("Could not complete registration, please try again");
+    }
+
+    const token = crypto.randomBytes(32).toString("hex");
+    await redisConnection.set(`verification_token:${token}`, result.user.id, "EX", 86400);
+
+    return {
+      company: {
+        id: result.company.id,
+        name: result.company.name,
+        prefix: result.company.prefix,
+        logoUrl: result.company.logoUrl,
+      },
+      user: {
+        id: result.user.id,
+        loginId: result.user.loginId,
+        email: result.user.email,
+        role: result.user.role,
+      },
+      employee: {
+        id: result.employee.id,
+        firstName: result.employee.firstName,
+        lastName: result.employee.lastName,
+      },
+      token,
+    };
+  }
+
+  // Finds a free company prefix: the base, else base+1, base+2, ... else a random suffix.
+  private async resolveUniquePrefix(base: string): Promise<string> {
+    const baseTaken = await prisma.company.findUnique({ where: { prefix: base } });
+    if (!baseTaken) return base;
+    for (let i = 1; i <= 99; i++) {
+      const candidate = `${base}${i}`;
+      const exists = await prisma.company.findUnique({ where: { prefix: candidate } });
+      if (!exists) return candidate;
+    }
+    return `${base}${crypto.randomInt(100, 1000)}`;
   }
 
   async verifyEmail(token: string) {
