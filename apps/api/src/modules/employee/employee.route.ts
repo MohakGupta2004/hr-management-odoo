@@ -1,18 +1,36 @@
 import { Router } from "express";
 import { EmployeeController } from "./employee.controller";
 import { requireAuth, requireRole } from "../../middleware/auth.middleware";
-import multer from "multer";
+import multer, { type FileFilterCallback } from "multer";
 import crypto from "crypto";
 import path from "path";
+import { BadRequestError } from "../../utils/errors";
+import type { Request } from "express";
 
 export const employeeRouter = Router();
 const employeeController = new EmployeeController();
 
 const storage = multer.memoryStorage();
 
+const ALLOWED_MIME_TYPES = new Set([
+  "application/pdf",
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+  "image/gif",
+]);
+
+const fileFilter = (_req: Request, file: Express.Multer.File, cb: FileFilterCallback) => {
+  if (!ALLOWED_MIME_TYPES.has(file.mimetype)) {
+    return cb(new BadRequestError("Only PDF or image files (JPEG, PNG, WEBP, GIF) are allowed"));
+  }
+  cb(null, true);
+};
+
 const upload = multer({
   storage,
-  limits: { fileSize: 10 * 1024 * 1024 } // 10MB limit
+  limits: { fileSize: 10 * 1024 * 1024 }, // 10MB limit
+  fileFilter,
 });
 
 employeeRouter.use(requireAuth);

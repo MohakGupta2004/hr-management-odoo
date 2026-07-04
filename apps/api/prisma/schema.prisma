@@ -29,6 +29,13 @@ enum MaritalStatus {
   DIVORCED
   WIDOWED
 }
+enum AttendanceStatus {
+  PRESENT
+  ABSENT
+  HALF_DAY
+  LEAVE
+  WEEKEND
+}
 
 model Company {
   id        String   @id @default(cuid())
@@ -172,7 +179,7 @@ model Employee {
 
   documents Document[]
 
-  // attendances Attendance[]
+  attendances Attendance[]
 
   // leaveRequests LeaveRequest[] @relation("Requester")
 
@@ -235,4 +242,28 @@ model Document {
   updatedAt  DateTime @updatedAt
 
   @@index([employeeId])
+}
+
+model Attendance {
+  id         String   @id @default(cuid())
+  employeeId String
+  employee   Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  date DateTime
+
+  checkIn  DateTime?
+  checkOut DateTime?
+
+  status AttendanceStatus
+
+  workingMinutes  Int?
+  overtimeMinutes Int?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([employeeId, date])
+  @@index([employeeId])
+  @@index([date])
+  @@index([status])
 }
