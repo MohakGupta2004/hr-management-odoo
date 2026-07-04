@@ -1,17 +1,20 @@
 import { Worker, Job } from "bullmq";
 import { EmailService } from "./email.service";
 import { redisConnection } from "./email.queue";
-import type { SendVerificationEmailJobData } from "./email.queue";
+import type { SendVerificationEmailJobData, SendWelcomeEmailJobData } from "./email.queue";
 
 const emailService = new EmailService();
 
 export function startEmailWorker() {
   const worker = new Worker(
     "emailQueue",
-    async (job: Job<SendVerificationEmailJobData>) => {
+    async (job: Job<SendVerificationEmailJobData | SendWelcomeEmailJobData>) => {
       if (job.name === "sendVerificationEmail") {
-        const { email, fullName, token } = job.data;
-        await emailService.sendVerificationEmail(email, fullName, token);
+        const data = job.data as SendVerificationEmailJobData;
+        await emailService.sendVerificationEmail(data.email, data.fullName, data.token);
+      } else if (job.name === "sendWelcomeEmail") {
+        const data = job.data as SendWelcomeEmailJobData;
+        await emailService.sendWelcomeEmail(data.email, data.fullName, data.loginId, data.temporaryPassword);
       }
     },
     {

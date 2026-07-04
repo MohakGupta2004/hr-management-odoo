@@ -81,3 +81,17 @@ export async function requireAuth(req: AuthenticatedRequest, res: Response, next
     next(error);
   }
 }
+
+export function requireRole(allowedRoles: string[]) {
+  return (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+    if (!req.user) {
+      return next(new UnauthorizedError("Authentication required"));
+    }
+
+    if (!allowedRoles.includes(req.user.role)) {
+      return next(new ForbiddenError("You do not have permission to perform this action"));
+    }
+
+    next();
+  };
+}
