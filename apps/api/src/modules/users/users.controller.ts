@@ -15,11 +15,17 @@ export class UsersController {
 
   create = async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const { name, email, password } = req.body;
-      if (!name || !email || !password) {
+      const { loginId, email, password, companyId } = req.body;
+      if (!loginId || !email || !password || !companyId) {
         return res.status(400).json({ error: "Missing required fields" });
       }
-      const user = await this.usersService.create({ name, email, password });
+      const passwordHash = await Bun.password.hash(password);
+      const user = await this.usersService.create({
+        loginId,
+        email,
+        passwordHash,
+        company: { connect: { id: companyId } },
+      });
       res.status(201).json(user);
     } catch (error: any) {
       if (error.code === "P2002") {

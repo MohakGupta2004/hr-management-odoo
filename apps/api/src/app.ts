@@ -2,6 +2,9 @@ import express from "express";
 import type { Request, Response, NextFunction } from "express";
 import cors from "cors";
 import { usersRouter } from "./modules/users/users.router";
+import { authRouter } from "./modules/auth/auth.route";
+
+import { AppError } from "./utils/errors";
 
 const app = express();
 
@@ -16,12 +19,16 @@ app.use((err: any, req: Request, res: Response, next: NextFunction) => {
 });
 
 app.use("/users", usersRouter);
+app.use("/auth", authRouter);
 
 app.use((req: Request, res: Response) => {
   res.status(404).json({ error: "Endpoint not found" });
 });
 
 app.use((err: any, req: Request, res: Response, next: NextFunction) => {
+  if (err instanceof AppError) {
+    return res.status(err.statusCode).json({ error: err.message });
+  }
   console.error("Unhandled Application Error:", err);
   res.status(500).json({ error: "Internal Server Error" });
 });

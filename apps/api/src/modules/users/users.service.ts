@@ -6,7 +6,7 @@ export class UsersService {
     return prisma.user.findMany({
       select: {
         id: true,
-        name: true,
+        loginId: true,
         email: true,
       },
     });
@@ -17,7 +17,7 @@ export class UsersService {
       data,
       select: {
         id: true,
-        name: true,
+        loginId: true,
         email: true,
       },
     });

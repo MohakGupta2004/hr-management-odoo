@@ -1,8 +1,3 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Get a free hosted Postgres database in seconds: `npx create-db`
-
 generator client {
   provider = "prisma-client"
   output   = "../generated/prisma"
@@ -12,9 +7,194 @@ datasource db {
   provider = "postgresql"
 }
 
-model User{
-  id        String      @id @default(cuid())
+enum Role {
+  ADMIN
+  HR_OFFICER
+  EMPLOYEE
+}
+enum EmploymentStatus {
+  ACTIVE
+  ON_LEAVE
+  RESIGNED
+  TERMINATED
+}
+enum Gender {
+  MALE
+  FEMALE
+  OTHER
+}
+enum MaritalStatus {
+  SINGLE
+  MARRIED
+  DIVORCED
+  WIDOWED
+}
+
+model Company {
+  id        String   @id @default(cuid())
   name      String   @unique
-  email     String   @unique
-  password  String
+
+  /// Used for Login ID generation
+  /// Example: TNJODO20260001
+  prefix    String   @unique
+
+  logoUrl   String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  users     User[]
+  employees Employee[]
+
+  @@index([name])
+}
+
+model User {
+  id           String @id @default(cuid())
+
+  /// Login ID
+  /// Example: TNJODO20260001
+  loginId      String @unique
+
+  email         String
+  passwordHash  String
+
+  role          Role @default(EMPLOYEE)
+
+  isEmailVerified    Boolean @default(false)
+  mustChangePassword Boolean @default(true)
+  isActive           Boolean @default(true)
+
+  lastLoginAt DateTime?
+  deletedAt   DateTime?
+
+  companyId String
+  company   Company @relation(fields: [companyId], references: [id])
+
+  employee Employee?
+
+  sessions           Session[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([companyId, email])
+  @@index([companyId])
+}
+
+model Session {
+  id String @id @default(cuid())
+
+  refreshTokenHash String @unique
+
+  ipAddress String?
+  userAgent String?
+
+  expiresAt DateTime
+
+  userId String
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+}
+
+model Employee {
+  id String @id @default(cuid())
+
+  userId String @unique
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  companyId String
+  company Company @relation(fields: [companyId], references: [id])
+
+  firstName String
+  lastName  String
+
+  avatarUrl String?
+
+  phone String? @unique
+
+  designation String?
+
+  department String?
+
+  location String?
+
+  employmentStatus EmploymentStatus @default(ACTIVE)
+
+  managerId String?
+
+  manager Employee? @relation("EmployeeManager", fields: [managerId], references: [id])
+
+  reports Employee[] @relation("EmployeeManager")
+
+  dateOfJoining DateTime
+
+  joiningYear Int
+
+  joiningSerial Int
+
+  about String?
+
+  whatILoveAboutJob String?
+
+  interestsHobbies String?
+
+  dateOfBirth DateTime?
+
+  mailingAddress String?
+
+  nationality String?
+
+  personalEmail String?
+
+  gender Gender?
+
+  maritalStatus MaritalStatus?
+
+  bankAccountNumber String?
+
+  bankName String?
+
+  ifscCode String?
+
+  panNumber String?
+
+  uanNumber String?
+
+  esicCode String?
+
+  // skills Skill[]
+
+  // certifications Certification[]
+
+  // documents Document[]
+
+  // attendances Attendance[]
+
+  // leaveRequests LeaveRequest[] @relation("Requester")
+
+  // approvedRequests LeaveRequest[] @relation("Approver")
+
+  // leaveAllocations LeaveAllocation[]
+
+  // salaryStructure SalaryStructure?
+
+  // payslips Payslip[]
+
+  createdAt DateTime @default(now())
+
+  updatedAt DateTime @updatedAt
+
+  @@unique([companyId, joiningYear, joiningSerial])
+
+  @@index([companyId])
+
+  @@index([managerId])
+
+  @@index([department])
+
+  @@index([employmentStatus])
 }
