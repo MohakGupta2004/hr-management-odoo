@@ -46,6 +46,10 @@ enum LeaveStatus {
   APPROVED
   REJECTED
 }
+enum SalaryComponentType {
+  EARNING
+  DEDUCTION
+}
 
 model Company {
   id        String   @id @default(cuid())
@@ -197,9 +201,11 @@ model Employee {
 
   leaveAllocations LeaveAllocation[]
 
-  // salaryStructure SalaryStructure?
+  salaryStructure SalaryStructure?
 
-  // payslips Payslip[]
+  payslips Payslip[]
+
+  generatedPayslips Payslip[] @relation("PayslipGenerator")
 
   createdAt DateTime @default(now())
 
@@ -321,4 +327,60 @@ model LeaveRequest {
   @@index([employeeId])
   @@index([status])
   @@index([approvedById])
+}
+
+model SalaryStructure {
+  id         String   @id @default(cuid())
+  employeeId String   @unique
+  employee   Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  effectiveFrom DateTime
+
+  components SalaryComponent[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model SalaryComponent {
+  id                String   @id @default(cuid())
+  salaryStructureId String
+  salaryStructure   SalaryStructure @relation(fields: [salaryStructureId], references: [id], onDelete: Cascade)
+
+  name   String
+  type   SalaryComponentType
+  amount Int
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([salaryStructureId])
+}
+
+model Payslip {
+  id         String   @id @default(cuid())
+  employeeId String
+  employee   Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  month Int
+  year  Int
+
+  workingDays Int
+  presentDays Int
+  leaveDays   Int
+  absentDays  Int
+
+  grossSalary     Int
+  totalDeductions Int
+  netSalary       Int
+
+  /// Immutable snapshot of the component + calculation breakdown at generation time
+  breakdown Json
+
+  generatedById String?
+  generatedBy   Employee? @relation("PayslipGenerator", fields: [generatedById], references: [id])
+  generatedAt   DateTime  @default(now())
+
+  @@unique([employeeId, month, year])
+  @@index([employeeId])
 }
