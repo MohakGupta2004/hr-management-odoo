@@ -1,0 +1,15 @@
+node_modules
+generated
+uploads
+.env
+.env.*
+!.env.example
+*.log
+.git
+.gitignore
+.idea
+.DS_Store
+Dockerfile
+.dockerignore
+docker-compose.yml
+README.md

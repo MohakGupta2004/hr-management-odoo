@@ -389,10 +389,19 @@ export class AuthService {
       throw new UnauthorizedError("User not found");
     }
 
-    return {
-      ...user,
-      // TODO: derive from Attendance module (currently hardcoded)
-      attendanceStatus: "CHECKED_OUT" as const,
-    };
+    // Derive today's attendance state from the Attendance module's row.
+    let attendanceStatus: "NOT_CHECKED_IN" | "CHECKED_IN" | "CHECKED_OUT" = "NOT_CHECKED_IN";
+    if (user.employee) {
+      const now = new Date();
+      const today = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+      const attendance = await prisma.attendance.findUnique({
+        where: { employeeId_date: { employeeId: user.employee.id, date: today } },
+        select: { checkIn: true, checkOut: true },
+      });
+      if (attendance?.checkOut) attendanceStatus = "CHECKED_OUT";
+      else if (attendance?.checkIn) attendanceStatus = "CHECKED_IN";
+    }
+
+    return { ...user, attendanceStatus };
   }
 }

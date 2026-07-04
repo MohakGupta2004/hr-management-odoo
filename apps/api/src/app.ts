@@ -29,6 +29,10 @@ app.use(cors());
 app.use(express.json());
 app.use("/uploads", express.static(uploadDir));
 
+app.get("/health", (req: Request, res: Response) => {
+  res.json({ status: "ok" });
+});
+
 app.use((err: any, req: Request, res: Response, next: NextFunction) => {
   if (err instanceof SyntaxError && "status" in err && err.status === 400 && "body" in err) {
     return res.status(400).json({ error: "Invalid JSON payload" });
